@@ -18,14 +18,18 @@ script_modules = {
      'HU_LVH': hu_lvh
     }
 
-
 # Initialize test data
 test_email = input("Enter email: ")
 # test_email_2 = input("Enter second email: ")
 test_phone = "+79444444444"
 
-print(f"\n{'='*60}")
-print(f"Running HU script with email: {test_email}")
-print(f"{'='*60}")
-hu_lvh.main_hu(test_email, test_phone)
+for script in script_modules:
+    module = script_modules[script]
+    main_function = getattr(module, f"main_{script.lower()}")
+    current_email = test_email # if script_count < 5 else second_email
+    
+    print(f"\n{'='*60}")
+    print(f"Running {script} with email: {test_email}")
+    print(f"{'='*60}")
+    main_function(current_email, test_phone)
    

@@ -1032,10 +1032,13 @@ def generate_test_plan(order):
             for p in compatible_third_party:
                 uncovered_payments.discard(p['en_name'])
     
+    print(f'Generated test plan with {len(plan)} combo(s)')
     return plan
 
 def execute_single_order(order):
     global driver, wait
+    user_email = order.user_email
+    test_phone = order.user_phone
     
     try:
         # Initialize step counter
@@ -1184,20 +1187,26 @@ def execute_single_order(order):
 
 def run_test_plan(order):
     plan = generate_test_plan(order)
+    c = 1
+   
     for combo in plan:
         # Set the specific delivery/payment
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
         # Execute order with these exact choices
+        print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']}')
         execute_single_order(order)
+        c += 1
 
-def main_hu(email, phone):
+def main_hu_lvh(email, phone):
     global driver, wait
 
     order = OrderContextHU()
+    order.user_email = email
+    order.user_phone = phone
 
     run_test_plan(order)
 
 if __name__ == "__main__":
-    main_hu()
+    main_hu_lvh()
 
