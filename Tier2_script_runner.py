@@ -5,7 +5,7 @@
 import BG_LVH_tier2 as bg_lvh
 import EU_LVH_tier2 as eu_lvh
 import HU_LVH_tier2 as hu_lvh
-# import PL_LVH_tier_2 as pl_lvh
+import PL_LVH_tier2 as pl_lvh
 # EU Ermenrichs
 # import CZ_ERM_tier_2 as cz_erm
 # import HU_ERM_tier_2 as hu_erm
@@ -18,20 +18,55 @@ script_modules = {
     'BG_LVH': bg_lvh,
     'EU_LVH': eu_lvh,
     'HU_LVH': hu_lvh,
+    'PL_LVH': pl_lvh
     }
 
+script_modules = {
+    'EU_LVH': eu_lvh,
+    }
+
+MAX_ORDERS_PER_BRAND = {
+    'Levenhuk': 6,  
+    'Ermenrich': 7
+}
+
+def collect_emails(max_orders):
+    # Ask for all needed emails upfront
+    emails_needed = (max_orders + 4) // 5  # Ceiling division
+    emails = []
+    
+    for i in range(emails_needed):
+        email = input(f"Enter email {i+1}: ")
+        emails.append(email)
+    return emails
+
+brand = 'Levenhuk'  # Make this automatic later ###
+max_orders = MAX_ORDERS_PER_BRAND[brand]
+emails = collect_emails(max_orders)
+
 # Initialize test data
-test_email = input("Enter email: ")
-# test_email_2 = input("Enter second email: ")
 test_phone = "+79444444444"
+order_counter = 0
+email_index = 0
 
 for script in script_modules:
     module = script_modules[script]
     main_function = getattr(module, f"main_{script.lower()}")
-    current_email = test_email # if script_count < 5 else second_email
+    current_email = emails[email_index]
     
     print(f"\n{'='*60}")
-    print(f"Running {script} with email: {test_email}")
+    print(f"Running {script} with email: {current_email}")
     print(f"{'='*60}")
-    main_function(current_email, test_phone)
+
+    # Run the script and get how many orders it made
+    orders_made = main_function(current_email, test_phone)
+    order_counter += orders_made
+
+    # Check if next script needs a different email
+    if order_counter >= 5:
+        email_index = order_counter // 5
+        if email_index >= len(emails):
+            # Safety: ask for another email if we somehow exceeded predictions
+            new_email = input(f"Unexpected! Need additional email (orders so far: {order_counter}): ")
+            emails.append(new_email)
    

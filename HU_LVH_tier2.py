@@ -1187,10 +1187,11 @@ def run_test_plan(order):
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
         order.sku['price_class'] = combo['price_class']
-        # Execute order with these exact choices
         print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
         execute_single_order(order)
         c += 1
+    
+    return len(plan)
 
 def main_hu_lvh(email, phone):
     global driver, wait
@@ -1199,7 +1200,8 @@ def main_hu_lvh(email, phone):
     order.user_email = email
     order.user_phone = phone
 
-    run_test_plan(order)
+    orders_made = run_test_plan(order)
+    return orders_made
 
 if __name__ == "__main__":
     main_hu_lvh()

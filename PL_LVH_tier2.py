@@ -15,7 +15,7 @@ import sys
 # Initialize driver with None (to be changed later)
 driver = None
 wait = None
-website_main = "https://eu.levenhuk.com/"
+website_main = "https://pl.levenhuk.com/"
 
 # Create the optimized driver (loads fast, limits images)
 def create_optimized_driver():
@@ -65,8 +65,8 @@ class ParentContext:
         self.sku = {
             'selected': None,
             'price_class': None,
-            # Delivery/payment options require certain price classes 
-            'price_class_type': 'fixed',  
+            # No delivery/payment options requiring certain price classes 
+            'price_class_type': 'flexible',  
             'unavailable': []   # Track unavailable SKUs
         }
 
@@ -156,108 +156,147 @@ class ParentContext:
         self.summary.update(kwargs)
 
 # Container for all order-related data
-class OrderContextEU(ParentContext):
+class OrderContextPL(ParentContext):
     def __init__(self):
         super().__init__()
     
         self.sku_lists = {
             'price_classes': {
-                0: [83836, 69737, 74830, 78663, 29276], # Under 70 EU
-
-                1: [84558, 70818, 79054, 78666, 72098] # 70+ EU
+                0: [72353, 69304, 79578, 70445, 84690], # Under 315 PLN (15 PLN fee)
+        
+                1: [79286, 69118, 78663, 72110, 84088]  # 315+ PLN
             }
         }
-
+    
         self.delivery_options = [
-                {            
-                    'local_name': 'courier',
-                    'en_name': 'courier',
-                    'opt_id': 'ID_SHIPPING_METHOD_ID_4',
-                    'is_default': True,
-                    'is_third_party': True
-                    }
-                ]
+            {
+                'local_name': 'dostawa kurierem',
+                'en_name': 'courier',
+                'opt_id': 'ID_SHIPPING_METHOD_ID_9',
+                'is_default': True,
+                'is_third_party': True
+                },
+            {            
+                'local_name': 'odbiór osobisty w sklepie levenhuk',
+                'en_name': 'shop pickup',
+                'opt_id': 'ID_SHIPPING_METHOD_ID_10'
+                },
+            
+            {
+                'local_name': 'inpost paczkomaty',
+                'en_name': 'inpost pickup',
+                'opt_id': 'ID_SHIPPING_METHOD_ID_11',
+                'is_third_party': True
+                }
+        ]
     
         self.payment_options = [
-                {
-                    'local_name': 'Bank transfer',
-                    'en_name': 'Bank transfer',
-                    'opt_id': 'ID_PAY_SYSTEM_ID_2',
-                    'is_default': True,
-                    'compatible_with': {
-                        'delivery': 'courier',
-                        'price_class': [1]
-                    }    
-                },
-                {
-                    'local_name': 'Credit/debit card',
-                    'en_name': 'Credit/debit card',
-                    'opt_id': 'ID_PAY_SYSTEM_ID_50',
-                    'is_third_party': True,
-                    'compatible_with': {
-                        'delivery': 'courier',
-                        'price_class': [1]
-                    }
-                },
-                {
-                    'local_name': 'PayPal',
-                    'en_name': 'PayPal',
-                    'opt_id': 'ID_PAY_SYSTEM_ID_5',
-                    'is_third_party': True,
-                    'compatible_with': {
-                        'delivery': 'courier',
-                        'price_class': [1]
-                    }
-                },
-                {
-                    'local_name': 'TBD',   # Actually no name displayed
-                    'en_name': 'TBD',
-                    'opt_id': None,
-                    'is_default': True,
-                    'is_virtual': True,    # Virtual = no UI element, but should be tracked for summary
-                    'compatible_with': {
-                        'delivery': 'courier',
-                        'price_class': [0]
-                    }
-                }   
-            ]
-
-        self.fees = {
-                'shipping': {
-                    'standard': {
-                        'under_70': {
-                            'display': 'TBD'
-                        },
-                        'over_70': {
-                            'display': 'Free shipping'
-                        }
-                    }
+            {
+                'local_name': 'przelewy',
+                'en_name': 'Bank transfer',
+                'opt_id': 'ID_PAY_SYSTEM_ID_14',
+                'is_default': True,
+                'is_third_party': True,
+                'compatible_with': {
+                    'delivery':['dostawa kurierem', 'odbiór osobisty w sklepie levenhuk', 'inpost paczkomaty'],
+                    'price_class': [0, 1]
+                }
+            },
+            {
+                'local_name': 'opłata za pobraniem',
+                'en_name': 'Cash on delivery',
+                'opt_id': "ID_PAY_SYSTEM_ID_30",
+                'compatible_with': {
+                    'delivery':['dostawa kurierem', 'odbiór osobisty w sklepie levenhuk'],
+                    'price_class': [0, 1]
+                }
+            },
+            {
+                'local_name': "paypal",
+                'en_name': "PayPal",
+                'opt_id': "ID_PAY_SYSTEM_ID_12",
+                'is_third_party': True,
+                'compatible_with': {
+                    'delivery':['dostawa kurierem', 'odbiór osobisty w sklepie levenhuk', 'inpost paczkomaty'],
+                    'price_class': [0, 1]
                 }
             }
+        ]
+        
+        self.fees = {
+            'shipping': {
+                'shop pickup': {
+                    'any': {
+                        'amount': 0,
+                        'display': 'Darmowa dostawa'
+                    }
+                },
+                'courier': {
+                    'under_315': {
+                        'amount': 15,  # Numeric for calculation
+                        'display': '15 zł'
+                    },
+                    'over_315': {
+                        'amount': 0,
+                        'display': 'Darmowa dostawa'
+                    }
+                },
+                'inpost pickup': {
+                    'under_315': {
+                        'amount': 15,  
+                        'display': '15 zł'
+                    },
+                    'over_315': {
+                        'amount': 0,
+                        'display': 'Darmowa dostawa'
+                }
+            }
+        }
+    }
+    
     
     def get_expected_shipping_fee(self):
         if not self.selected_delivery:
             return None, None
 
-        price_class = self.sku['price_class']  # 0 = under 70, 1 = over 70
+        delivery_name = self.selected_delivery['en_name']
+        price_class = self.sku['price_class']  
 
-        # Only have standard delivery
-        if price_class == 0:  # Under 70€
-            tier = 'under_70'
-        else:  # Over 70€
-            tier = 'over_70'
+        # Shop pickup
+        if delivery_name == 'shop pickup':
+            fee_data = self.fees['shipping'][delivery_name]['any']
+        
+        # Courier and InPost
+        else:
+            if price_class == 0:  
+                tier = 'under_315'
+            else:  
+                tier = 'over_315'
 
-        return self.fees['shipping']['standard'][tier]['display'], None # Return display string only
-    
+            fee_data = self.fees['shipping'][delivery_name][tier]
+        return fee_data['display'], fee_data['amount']
+
     def get_expected_payment_fee(self):
-        # No payment fees
+        # PL has no payment fees
         return None, None
-    
+
     def get_expected_total_fee(self):
-        # Just return the shipping fee display string
-        ship_display, _ = self.get_expected_shipping_fee()
-        return ship_display, None
-    
+        ship_display, ship_amount = self.get_expected_shipping_fee()
+        pay_display, pay_amount = self.get_expected_payment_fee()
+        
+        # Calculate total amount (handle None as 0)
+        ship_amount = ship_amount if ship_amount is not None else 0
+        pay_amount = pay_amount if pay_amount is not None else 0
+        total_amount = ship_amount + pay_amount
+        
+        # Format display string
+        if total_amount == 0:
+            display = 'Darmowa dostawa'
+        else:
+            display = f'{total_amount} zł'
+        
+        return display, total_amount
+
 def determine_price_class(payment_option):
     price_class_list = payment_option['compatible_with']['price_class']
     price_class = random.choice(price_class_list)
@@ -280,39 +319,41 @@ def choose_sku(order):
         return selected_sku
     
     # If we get here, both classes have no available SKUs
-    print("✗ WARNING: No available SKUs in the price class(es)!")
+    print("✗ WARNING: No available SKUs in either price class!")
     return None
 
 def choose_address():
     # Define a list of shipping addresses
-    # No free delivery to Greece
     shipping_addresses = [
     {
-        'country': 'Finland',
-        'city': 'Oulu',
-        'address': 'Aleksanterinkatu 46',
-        'postal_code': '90120'
+        'country': 'Polska',
+        'city': 'Warszawa',
+        'address': 'gen. Leopolda Okulickiego 8',
+        'postal_code': '03-984'
     },
     {
-        'country': 'Ireland',
-        'city': 'Galway', 
-        'address': '105 Forster Ct',
-        'postal_code': 'H91 D95P'
+        'country': 'Polska',
+        'city': 'Kraków', 
+        'address': 'Komandosów 7',
+        'postal_code': '30-334'
     },
     {
-        'country': 'Slovenia',
-        'city': 'Maribor',
-        'address': 'Komenskega ulica 2',
-        'postal_code': '2000'
+        'country': 'Polska',
+        'city': 'Gdańsk',
+        'address': 'Ogarna 30',
+        'postal_code': '80-826'
     }
 ]
+    
     address = shipping_addresses[random.randint(0,2)] 
     return(address) #returns a dictionary
 
 def extract_price(price_text):
     # Remove all characters except digits and the comma/dot
     # Only EU, US have dot (23.95 EU - no need to replace), the rest have comma
-    clean_text = re.sub(r'[^\d.]', '', price_text)
+    clean_text = re.sub(r'[^\d,]', '', price_text)
+    # Replace comma with dot 
+    clean_text = clean_text.replace(',', '.')   
     try:
         return float(clean_text)
     except ValueError:
@@ -390,7 +431,7 @@ def is_item_available(order):
         search_for_sku(sku)
         price_text = driver.find_element(By.CLASS_NAME, "catalog-card__price").text.lower()
         # Check language file for the translations: out of stock, discontinued, coming soon
-        unavailable_indicators = ['няма в наличност', 'прекратено производство', 'очаквайте скоро']
+        unavailable_indicators = ["non disponibile", "fuori produzione", "presto in arrivo"]
         if any(indicator in price_text for indicator in unavailable_indicators):
             return False, price_text
         else:
@@ -571,6 +612,102 @@ def proceed_to_checkout():
         print(f"✗ Failed to proceed to checkout: {str(e)}")
         take_screenshot("checkout_error")
         return False
+
+def select_inpost(order):
+# Separate function for InPost delivery
+    try:
+        # Step 1: Get InPost option from order context
+        inpost_option = order.get_delivery_option_by_name('inpost paczkomaty')
+        if not inpost_option:
+            print("✗ InPost option not found")
+            return False, 'inpost paczkomaty'
+        
+        # Step 2: Click the InPost radio button/label
+        inpost_element = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 
+                f"label[for='{inpost_option['opt_id']}']"))
+        )
+        inpost_element.click()
+        print("InPost delivery selected")
+        time.sleep(3)  # Wait for the dropdowns to appear
+    
+        # Step 3: Select city using Select2
+        print("Selecting city...")
+
+        # Find ALL Select2 containers, then get the one for InPost city
+        # (Appears AFTER the country/city fields, ID: "bx-shipping-inpost-city")
+        city_container = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 
+                "#select2-bx-shipping-inpost-city-container"))
+        )
+        city_container.click()
+        print("City dropdown opened")
+        time.sleep(1)
+
+        # Get all city options directly (search input might be hidden)
+        city_options = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 
+                ".select2-container--open .select2-results__option"))
+        )
+        
+        # Filter out any empty or loading options
+        valid_cities = [opt for opt in city_options if opt.text and opt.text.strip()]
+        
+        if not valid_cities:
+            print("  ✗ No city options found")
+            return False, 'inpost'
+        
+        print(f"Found {len(valid_cities)} cities")
+
+        # Choose a random city
+        chosen_city = random.choice(valid_cities)
+        city_name = chosen_city.text
+        print(f"Selecting city: {city_name}")
+        
+        # Click directly on the option
+        chosen_city.click()
+        print(f"City selected")
+        time.sleep(3)
+
+        # Select pickup point
+        print("Selecting pickup point...")
+        
+        point_container = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 
+                "#select2-bx-shipping-inpost-point-container"))
+        )
+        point_container.click()
+        print("Pickup point dropdown opened")
+        time.sleep(2)
+        
+        # Get all pickup point options
+        point_options = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 
+                ".select2-container--open .select2-results__option"))
+        )
+        
+        valid_points = [p for p in point_options if p.text and p.text.strip()]
+        
+        if not valid_points:
+            print("✗ No pickup points found")
+            return False, 'inpost paczkomaty'
+        
+        print(f"Found {len(valid_points)} pickup points")
+        
+        chosen_point = random.choice(valid_points)
+        print(f"Selecting pickup point: {chosen_point.text[:50]}")
+        chosen_point.click()
+        print(f"Pickup point selected")
+        time.sleep(2)
+
+        print("✓ InPost pickup point selected successfully")
+        return True, "inpost paczkomaty"
+    
+    except Exception as e:
+        print(f"✗ Failed to select InPost: {str(e)}")
+        traceback.print_exc()
+        take_screenshot("inpost_selection_error")
+        return False, 'inpost paczkomaty'
     
 def click_delivery_option(order):
     try:
@@ -585,31 +722,36 @@ def click_delivery_option(order):
         
         # Only interact with UI if not default
         if selected_name != default_name:
-            try:
-                # Find and click the delivery option label
-                delivery_label = wait.until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, 
-                        f"label[for='{selected_id}']"))
-                )
-                print("Found delivery label, attempting to click...")
+            if selected_name == 'inpost paczkomaty':
+                succcess, name = select_inpost(order)
+                return succcess
+            else:
+                try:
+                    # Find and click the delivery option label
+                    delivery_label = wait.until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, 
+                            f"label[for='{selected_id}']"))
+                    )
+                    print("Found delivery label, attempting to click...")
                 
-                # Scroll to the label
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", 
-                    delivery_label
-                )
-                time.sleep(0.5)
+                    # Scroll to the label
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", 
+                        delivery_label
+                    )
+                    time.sleep(0.5)
                 
-                # Click the label
-                delivery_label.click()
-                time.sleep(1)
+                    # Click the label
+                    delivery_label.click()
+                    time.sleep(1)
                 
-                print(f"✓ Option clicked: {selected_name}")
-                return True
+                    print(f"✓ Option clicked: {selected_name}")
+                    return True
                 
-            except Exception as e:
-                print(f"✗ Failed to click delivery option {selected_name}: {str(e)}")
-                return False
+                except Exception as e:
+                    print(f"✗ Failed to click delivery option {selected_name}: {str(e)}")
+                    return False
+        
         else:
             print(f"Using default delivery option ({default_name}), no action needed")
             return True
@@ -853,31 +995,30 @@ def verify_order_fee(order):
     try:
         print("Verifying order fees...")
         time.sleep(2)
-
+        
         # Get actual fee from page
         fee_element = wait.until(
             EC.presence_of_element_located((By.ID, "bx-cost-shipping"))
         )    
         actual_fee = fee_element.text
         print(f"Actual fee on page: '{actual_fee}'")
-
+        
         # Get expected fee from order context
-        expected_display, _ = order.get_expected_total_fee()
+        expected_display, expected_amount = order.get_expected_total_fee()
         order.summary['expected_fee'] = expected_display
         
         if expected_display is None:
             print(f"✗ Can't determine expected fee")
             return False, actual_fee
         
+        # Compare display strings
         if actual_fee == expected_display:
             print(f"✓ Fee verified: {actual_fee}")
             return True, actual_fee
         else:
             print(f"✗ Fee mismatch: Expected '{expected_display}', got '{actual_fee}'")
             return False, actual_fee
-        
-        #✗ Fee mismatch: Expected '{'display': 'noch festzulegen'}', got 'noch festzulegen'
-            
+              
     except Exception as e:
         print(f"✗ Error verifying order fees: {str(e)}")
         take_screenshot("fee_verification_error")
@@ -1140,7 +1281,7 @@ def execute_single_order(order):
         else:
             print("Order number: order wasn't placed")
         print(f"Chosen SKU: {order.sku['selected']}")
-        print(f"Item price: €{order.summary['basket_price']}")
+        print(f"Item price: {order.summary['basket_price']} zł")
         print(f"Delivery option: {order.summary['delivery_option']}")
         print(f"Payment option: {order.summary['payment_option']}")
 
@@ -1173,13 +1314,13 @@ def run_test_plan(order):
         print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
         execute_single_order(order)
         c += 1
-    
+
     return len(plan)
 
-def main_eu_lvh(email, phone):
+def main_pl_lvh(email, phone):
     global driver, wait
 
-    order = OrderContextEU()
+    order = OrderContextPL()
     order.user_email = email
     order.user_phone = phone
 
@@ -1187,5 +1328,5 @@ def main_eu_lvh(email, phone):
     return orders_made
 
 if __name__ == "__main__":
-    main_eu_lvh()
+    main_pl_lvh()
 

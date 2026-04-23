@@ -1130,6 +1130,8 @@ def run_test_plan(order):
         print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
         execute_single_order(order)
         c += 1
+    
+    return len(plan)
 
 def main_bg_lvh(email, phone):
     global driver, wait
@@ -1138,7 +1140,8 @@ def main_bg_lvh(email, phone):
     order.user_email = email
     order.user_phone = phone
 
-    run_test_plan(order)
+    orders_made = run_test_plan(order)
+    return orders_made
 
 if __name__ == "__main__":
     main_bg_lvh()
