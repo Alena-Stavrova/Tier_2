@@ -2,7 +2,7 @@
 #import RU ERM
 #import RU LVH
 # EU Levenhuks
-# import BG_LVH_tier_2 as bg_lvh
+import BG_LVH_tier2 as bg_lvh
 # import EU_LVH_tier_2 as eu_lvh
 import HU_LVH_tier2 as hu_lvh
 # import PL_LVH_tier_2 as pl_lvh
@@ -15,7 +15,8 @@ import HU_LVH_tier2 as hu_lvh
 import random
 
 script_modules = {
-     'HU_LVH': hu_lvh
+    'BG_LVH': bg_lvh,
+    'HU_LVH': hu_lvh
     }
 
 # Initialize test data

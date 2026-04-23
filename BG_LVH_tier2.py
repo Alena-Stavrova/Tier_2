@@ -15,7 +15,7 @@ import sys
 # Initialize driver with None (to be changed later)
 driver = None
 wait = None
-website_main = "https://hu.levenhuk.com/"
+website_main = "https://bg.levenhuk.com/"
 
 # Create the optimized driver (loads fast, limits images)
 def create_optimized_driver():
@@ -65,8 +65,8 @@ class ParentContext:
         self.sku = {
             'selected': None,
             'price_class': None,
-            # No delivery/payment options requiring certain price classes 
-            'price_class_type': 'flexible',  
+            # Delivery/payment options require certain price classes 
+            'price_class_type': 'fixed',  
             'unavailable': []   # Track unavailable SKUs
         }
 
@@ -156,150 +156,98 @@ class ParentContext:
         self.summary.update(kwargs)
 
 # Container for all order-related data
-class OrderContextHU(ParentContext):
+class OrderContextBG(ParentContext):
     def __init__(self):
         super().__init__()
     
         self.sku_lists = {
             'price_classes': {
-                0: [79206, 70226, 81932, 72097, 70445], # Under 50,000 FL
-        
-                1: [72481, 70241, 67699, 72100, 84553]  # 50,000+ FL
+                0: [69378, 72209, 81932, 69669, 79667], # Under 200 BGN
+
+                1: [73800, 78160, 67698, 70421, 84085] # 200+ BGN
             }
         }
      
         self.delivery_options = [
-            {            
-                'local_name': 'futárszolgálatos szállítás',
-                'en_name': 'courier',
-                'opt_id': 'ID_SHIPPING_METHOD_ID_13',
-                'is_default': True,
-                'is_third_party': True
+                {            
+                    'local_name': 'доставка с куриер',
+                    'en_name': 'courier',
+                    'opt_id': 'ID_SHIPPING_METHOD_ID_20',
+                    'is_default': True,
+                    'is_third_party': True
+                    }
+                ]
+
+        self.payment_options = [
+                {
+                    'local_name': 'чрез банков превод',
+                    'en_name': 'Bank transfer',
+                    'opt_id': 'ID_PAY_SYSTEM_ID_36',
+                    'is_default': True,
+                    'compatible_with': {
+                        'delivery': 'доставка с куриер',
+                        'price_class': [1]
+                    }    
                 },
-            {
-                'local_name': 'átvevőponton történő átvétel',
-                'en_name': 'shop pickup',
-                'opt_id': 'ID_SHIPPING_METHOD_ID_14'
+                {
+                    'local_name': 'наложен платеж',
+                    'en_name': 'Cash on delivery',
+                    'opt_id': "ID_PAY_SYSTEM_ID_37",
+                    'is_cash': True,
+                    'compatible_with': {
+                        'delivery': 'доставка с куриер',
+                        'price_class': [1]
+                    }
+                },
+                {
+                    'local_name': 'TBD',
+                    'en_name': 'TBD',
+                    'opt_id': None,
+                    'is_default': True,
+                    'is_virtual': True, # Virtual = no UI element, but should be tracked for summary
+                    'compatible_with': {
+                        'delivery': 'доставка с куриер',
+                        'price_class': [0]
+                    }
                 }
             ]
 
-        self.payment_options = [
-            {
-                'local_name': 'banki átutalás',
-                'en_name': 'Bank transfer',
-                'opt_id': 'ID_PAY_SYSTEM_ID_32',
-                'is_default': True,
-                'compatible_with': {
-                    'delivery':['futárszolgálatos szállítás', 'átvevőponton történő átvétel'],
-                    'price_class': [0, 1]
-                }
-            },
-            {
-                'local_name': 'utánvétes fizetés',
-                'en_name': 'Cash on delivery',
-                'opt_id': 'ID_PAY_SYSTEM_ID_31',
-                'is_cash': True,
-                'compatible_with': {
-                    'delivery':['futárszolgálatos szállítás', 'átvevőponton történő átvétel'],
-                    'price_class': [0, 1]
-                }
-            },
-            {
-                'local_name': 'paypal',
-                'en_name': 'PayPal',
-                'opt_id': 'ID_PAY_SYSTEM_ID_25',
-                'is_third_party': True,
-                'compatible_with': {
-                    'delivery':['futárszolgálatos szállítás', 'átvevőponton történő átvétel'],
-                    'price_class': [0, 1]
-                }
-            }
-        ]
-
         self.fees = {
-            'shipping': {
-                'shop pickup': {
-                    'any': 'Ingyenes kiszállítás'
-                },
-                'courier': {
-                    'under_50000': {
-                        'amount': 2000,  # Numeric for calculation
-                        'display': '2 000 Ft'
-                    },
-                    'over_50000': {
-                        'amount': 0,
-                        'display': 'Ingyenes kiszállítás'
+                'shipping': {
+                    'standard': {
+                        'under_200': {
+                            'display': 'TBD'
+                        },
+                        'over_200': {
+                            'display': 'Безплатна доставка'
+                        }
                     }
-                }
-            },
-            'payment': {
-                'cash': {
-                    'courier': {
-                        'amount': 250,
-                        'display': '250 Ft'
-                    },
-                    'shop pickup': {
-                        'amount': 0,
-                        'display': None
-                    }
-                },
-                'other': {
-                    'amount': 0,
-                    'display': None  # No additional fee
                 }
             }
-        }
-    
     
     def get_expected_shipping_fee(self):
         if not self.selected_delivery:
             return None, None
 
-        delivery_name = self.selected_delivery['local_name']
-        price_class = self.sku['price_class']  
+        price_class = self.sku['price_class']  # 0 = under 70, 1 = over 70
 
-        if delivery_name == 'átvevőponton történő átvétel':
-            fee = self.fees['shipping']['shop pickup']['any']
-            return fee, None  # Return display string only
-        
-        # Courier
+        # Only have standard delivery
         if price_class == 0:  
-            tier = 'under_50000'
+            tier = 'under_200'
         else:  
-            tier = 'over_50000'
+            tier = 'over_200'
 
-        fee_data = self.fees['shipping']['courier'][tier]
-        return fee_data['display'], fee_data['amount']
-
+        return self.fees['shipping']['standard'][tier]['display'], None # Return display string only
+    
     def get_expected_payment_fee(self):
-        if not self.selected_payment:
-            return None, None
-        
-        is_cash = self.selected_payment.get('is_cash', False)
-        delivery = self.selected_delivery['en_name']
-        
-        if is_cash:
-            fee_data = self.fees['payment']['cash'][delivery]
-            return fee_data['display'], fee_data['amount']
-        else:
-            return None, 0  # No payment fee
-
+        # No payment fees
+        return None, None
+    
     def get_expected_total_fee(self):
-        ship_display, ship_amount = self.get_expected_shipping_fee()
-        pay_display, pay_amount = self.get_expected_payment_fee()
-        
-        # Calculate total amount (handle None as 0)
-        ship_amount = ship_amount if ship_amount is not None else 0
-        pay_amount = pay_amount if pay_amount is not None else 0
-        total_amount = ship_amount + pay_amount
-        
-        # Format display string
-        if total_amount == 0:
-            display = 'Ingyenes kiszállítás'
-        else:
-            display = f'{total_amount} Ft'
-        
-        return display, total_amount
+        # Just return the shipping fee display string
+        ship_display, _ = self.get_expected_shipping_fee()
+        return ship_display, None
+    
 
 def determine_price_class(payment_option):
     price_class_list = payment_option['compatible_with']['price_class']
@@ -323,32 +271,31 @@ def choose_sku(order):
         return selected_sku
     
     # If we get here, both classes have no available SKUs
-    print("✗ WARNING: No available SKUs in either price class!")
+    print("✗ WARNING: No available SKUs in the price class(es)!")
     return None
 
 def choose_address():
     # Define a list of shipping addresses
     shipping_addresses = [
-    {
-        'country': 'Magyarország',
-        'city': 'Budapest',
-        'address': 'Egressy út 24',
-        'postal_code': '1149'
-    },
-    {
-        'country': 'Magyarország',
-        'city': 'Debrecen', 
-        'address': 'Gogol u. 25',
-        'postal_code': '4034'
-    },
-    {
-        'country': 'Magyarország',
-        'city': 'Szeged',
-        'address': ' Rom u. 9',
-        'postal_code': '6723'
-    }
-]
-    
+        {
+            'country': 'България',
+            'city': 'София',
+            'address': 'кв. Орландовци, ул. „Свобода“ 15',
+            'postal_code': '1225'
+        },
+        {
+            'country': 'България',
+            'city': 'Пловдив', 
+            'address': 'Каменица 2 Източен, бул. „Източен“ 40',
+            'postal_code': '4017'
+        },
+        {
+            'country': 'България',
+            'city': 'Варна',
+            'address': 'Варна Център Приморски, ул. „Генерал Столетов“ 68',
+            'postal_code': '9002'
+        }
+    ]
     address = shipping_addresses[random.randint(0,2)] 
     return(address) #returns a dictionary
 
@@ -435,7 +382,7 @@ def is_item_available(order):
         search_for_sku(sku)
         price_text = driver.find_element(By.CLASS_NAME, "catalog-card__price").text.lower()
         # Check language file for the translations: out of stock, discontinued, coming soon
-        unavailable_indicators = ["non disponibile", "fuori produzione", "presto in arrivo"]
+        unavailable_indicators = ['няма в наличност', 'прекратено производство', 'очаквайте скоро']
         if any(indicator in price_text for indicator in unavailable_indicators):
             return False, price_text
         else:
@@ -898,39 +845,31 @@ def verify_order_fee(order):
     try:
         print("Verifying order fees...")
         time.sleep(2)
-        
+
         # Get actual fee from page
         fee_element = wait.until(
             EC.presence_of_element_located((By.ID, "bx-cost-shipping"))
         )    
         actual_fee = fee_element.text
         print(f"Actual fee on page: '{actual_fee}'")
-        
+
         # Get expected fee from order context
-        expected_display, expected_amount = order.get_expected_total_fee()
+        expected_display, _ = order.get_expected_total_fee()
         order.summary['expected_fee'] = expected_display
         
         if expected_display is None:
             print(f"✗ Can't determine expected fee")
             return False, actual_fee
         
-        # Special case 
-        if expected_display == 'Ingyenes kiszállítás':
-            if actual_fee == 'Ingyenes kiszállítás':
-                print(f"✓ Fee correctly marked as Ingyenes kiszállítás")
-                return True, actual_fee
-            else:
-                print(f"✗ Expected 'Ingyenes kiszállítás', got '{actual_fee}'")
-                return False, actual_fee
-        
-        # Compare display strings
         if actual_fee == expected_display:
             print(f"✓ Fee verified: {actual_fee}")
             return True, actual_fee
         else:
             print(f"✗ Fee mismatch: Expected '{expected_display}', got '{actual_fee}'")
             return False, actual_fee
-              
+        
+        #✗ Fee mismatch: Expected '{'display': 'noch festzulegen'}', got 'noch festzulegen'
+            
     except Exception as e:
         print(f"✗ Error verifying order fees: {str(e)}")
         take_screenshot("fee_verification_error")
@@ -1192,15 +1131,15 @@ def run_test_plan(order):
         execute_single_order(order)
         c += 1
 
-def main_hu_lvh(email, phone):
+def main_bg_lvh(email, phone):
     global driver, wait
 
-    order = OrderContextHU()
+    order = OrderContextBG()
     order.user_email = email
     order.user_phone = phone
 
     run_test_plan(order)
 
 if __name__ == "__main__":
-    main_hu_lvh()
+    main_bg_lvh()
 
