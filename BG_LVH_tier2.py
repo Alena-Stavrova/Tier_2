@@ -66,6 +66,7 @@ class ParentContext:
             'selected': None,
             'price_class': None,
             # Delivery/payment options require certain price classes 
+            # This parameter is not currently used in the code
             'price_class_type': 'fixed',  
             'unavailable': []   # Track unavailable SKUs
         }
@@ -937,9 +938,11 @@ def generate_test_plan(order):
     plan = []
     uncovered_payments = set(p['en_name'] for p in third_party_payments)
 
+    # Pass 1: coverage-optimized (greedy by delivery)
     for delivery in third_party_deliveries:
         order.selected_delivery = delivery
         compatible_payments = order.get_available_payment_options()
+        chosen_payment = None
 
         # Case 1: We have third-party payments to cover
         if third_party_payments:
@@ -947,23 +950,57 @@ def generate_test_plan(order):
                 p for p in compatible_payments 
                 if p['en_name'] in uncovered_payments
             ]
-            
+
             if compatible_third_party:
-                chosen_payment = compatible_third_party[0]
-                for p in compatible_third_party:
-                    uncovered_payments.discard(p['en_name'])
+                chosen_payment = random.choice(compatible_third_party)
+                uncovered_payments.discard(chosen_payment['en_name'])
+            else:
+                # All payments covered, fallback to any compatible third-party
+                compatible_third_party = [
+                    p for p in compatible_payments 
+                    if p in third_party_payments
+                ]
+                if compatible_third_party:
+                    chosen_payment = random.choice(compatible_third_party)
     
         # Case 2: Only third-party deliveries exist, no third-party payments
         elif third_party_deliveries:
             if compatible_payments:
                 chosen_payment = random.choice(compatible_payments)
         
-        price_class = determine_price_class(chosen_payment)
-        plan.append({
-            'delivery': delivery,
-            'payment': chosen_payment,
-            'price_class': price_class
-        })
+        if chosen_payment:
+            price_class = determine_price_class(chosen_payment)
+            plan.append({
+                'delivery': delivery,
+                'payment': chosen_payment,
+                'price_class': price_class
+            })
+    
+    # Pass 2: handle any remaining uncovered payments
+    # (when there are more payments than deliveries can cover in one pass)
+    if uncovered_payments:
+        print(f"Payments still uncovered: {uncovered_payments}")
+        
+        for payment_name in uncovered_payments:
+            # Find the payment object
+            payment = next(p for p in third_party_payments if p['en_name'] == payment_name)
+            
+            # Find a compatible third-party delivery
+            compatible_deliveries = [
+                d for d in third_party_deliveries
+                if d['local_name'] in payment.get('compatible_with', {}).get('delivery', [])
+            ]
+            
+            if compatible_deliveries:
+                delivery = random.choice(compatible_deliveries)
+                price_class = determine_price_class(payment)
+                plan.append({
+                    'delivery': delivery,
+                    'payment': payment,
+                    'price_class': price_class
+                })
+            else:
+                print(f"✗ Warning: No compatible delivery for {payment_name}")
     
     print(f'Generated test plan with {len(plan)} combo(s)')
     return plan
@@ -1096,7 +1133,7 @@ def execute_single_order(order):
         else:
             print("Order number: order wasn't placed")
         print(f"Chosen SKU: {order.sku['selected']}")
-        print(f"Item price: {order.summary['basket_price']} Ft")
+        print(f"Item price: {order.summary['basket_price']} лв")
         print(f"Delivery option: {order.summary['delivery_option']}")
         print(f"Payment option: {order.summary['payment_option']}")
 
@@ -1126,7 +1163,6 @@ def run_test_plan(order):
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
         order.sku['price_class'] = combo['price_class']
-        # Execute order with these exact choices
         print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
         execute_single_order(order)
         c += 1
