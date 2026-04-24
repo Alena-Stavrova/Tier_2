@@ -66,6 +66,7 @@ class ParentContext:
             'selected': None,
             'price_class': None,
             # Delivery/payment options require certain price classes 
+            # This parameter is not currently used in the code
             'price_class_type': 'fixed',  
             'unavailable': []   # Track unavailable SKUs
         }
@@ -155,7 +156,6 @@ class ParentContext:
     def update_summary(self, **kwargs):
         self.summary.update(kwargs)
 
-# Container for all order-related data
 class OrderContextEU(ParentContext):
     def __init__(self):
         super().__init__()
@@ -241,7 +241,6 @@ class OrderContextEU(ParentContext):
 
         price_class = self.sku['price_class']  # 0 = under 70, 1 = over 70
 
-        # Only have standard delivery
         if price_class == 0:  # Under 70€
             tier = 'under_70'
         else:  # Over 70€
@@ -263,7 +262,6 @@ def determine_price_class(payment_option):
     price_class = random.choice(price_class_list)
     return price_class
 
-# Choose random sku, return a string and int price class
 def choose_sku(order):
     price_class = order.sku['price_class']
     sku_list = order.get_sku_list(price_class)
@@ -701,7 +699,6 @@ def fill_order_form(user_email, test_phone):
         
         # Phone field
         try:
-            # Different selector - no ID
             phone_field = WebDriverWait(driver, 5).until(
                 EC.visibility_of_element_located((By.NAME, "ORDER_PROP_88"))
             )

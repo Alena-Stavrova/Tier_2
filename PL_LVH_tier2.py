@@ -66,6 +66,7 @@ class ParentContext:
             'selected': None,
             'price_class': None,
             # No delivery/payment options requiring certain price classes 
+            # This parameter is not currently used in the code
             'price_class_type': 'flexible',  
             'unavailable': []   # Track unavailable SKUs
         }
@@ -155,7 +156,6 @@ class ParentContext:
     def update_summary(self, **kwargs):
         self.summary.update(kwargs)
 
-# Container for all order-related data
 class OrderContextPL(ParentContext):
     def __init__(self):
         super().__init__()
@@ -302,7 +302,6 @@ def determine_price_class(payment_option):
     price_class = random.choice(price_class_list)
     return price_class
 
-# Choose random sku, return a string and int price class
 def choose_sku(order):
     price_class = order.sku['price_class']
     sku_list = order.get_sku_list(price_class)
@@ -620,7 +619,7 @@ def select_inpost(order):
         inpost_option = order.get_delivery_option_by_name('inpost paczkomaty')
         if not inpost_option:
             print("✗ InPost option not found")
-            return False, 'inpost paczkomaty'
+            return False
         
         # Step 2: Click the InPost radio button/label
         inpost_element = WebDriverWait(driver, 5).until(
@@ -655,7 +654,7 @@ def select_inpost(order):
         
         if not valid_cities:
             print("  ✗ No city options found")
-            return False, 'inpost'
+            return False
         
         print(f"Found {len(valid_cities)} cities")
 
@@ -690,7 +689,7 @@ def select_inpost(order):
         
         if not valid_points:
             print("✗ No pickup points found")
-            return False, 'inpost paczkomaty'
+            return False
         
         print(f"Found {len(valid_points)} pickup points")
         
@@ -701,13 +700,13 @@ def select_inpost(order):
         time.sleep(2)
 
         print("✓ InPost pickup point selected successfully")
-        return True, "inpost paczkomaty"
+        return True
     
     except Exception as e:
         print(f"✗ Failed to select InPost: {str(e)}")
         traceback.print_exc()
         take_screenshot("inpost_selection_error")
-        return False, 'inpost paczkomaty'
+        return False
     
 def click_delivery_option(order):
     try:
@@ -723,8 +722,7 @@ def click_delivery_option(order):
         # Only interact with UI if not default
         if selected_name != default_name:
             if selected_name == 'inpost paczkomaty':
-                succcess, name = select_inpost(order)
-                return succcess
+                return select_inpost(order)
             else:
                 try:
                     # Find and click the delivery option label
@@ -843,7 +841,6 @@ def fill_order_form(user_email, test_phone):
         
         # Phone field
         try:
-            # Different selector - no ID
             phone_field = WebDriverWait(driver, 5).until(
                 EC.visibility_of_element_located((By.NAME, "ORDER_PROP_88"))
             )
