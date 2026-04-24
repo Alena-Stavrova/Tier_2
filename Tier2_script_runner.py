@@ -22,7 +22,7 @@ script_modules = {
     }
 
 script_modules = {
-    'EU_LVH': eu_lvh,
+    'HU_LVH': hu_lvh
     }
 
 MAX_ORDERS_PER_BRAND = {
