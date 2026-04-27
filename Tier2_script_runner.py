@@ -9,7 +9,7 @@ import PL_LVH_tier2 as pl_lvh
 # EU Ermenrichs
 import CZ_ERM_tier2 as cz_erm
 import HU_ERM_tier2 as hu_erm
-# import IT_ERM_tier_2 as it_erm
+import IT_ERM_tier2 as it_erm
 import PL_ERM_tier2 as pl_erm
 
 import random
@@ -18,16 +18,20 @@ script_modules = {
     'BG_LVH': bg_lvh,
     'EU_LVH': eu_lvh,
     'HU_LVH': hu_lvh,
-    'PL_LVH': pl_lvh
+    'PL_LVH': pl_lvh, 
+    'CZ_ERM': cz_erm,
+    'HU_ERM': hu_erm,
+    'IT_ERM': it_erm,
+    'PL_ERM': pl_erm
     }
 
 script_modules = {
-     'HU_ERM': hu_erm
+    'IT_ERM': it_erm
     }
 
 MAX_ORDERS_PER_BRAND = {
-    'Levenhuk': 6,  
-    'Ermenrich': 7
+    'Levenhuk': 6,  # BG - 1, EU - 2, HU - 1, PL - 2 
+    'Ermenrich': 7 # CZ - 2, HU - 1, IT - 2, PL - 2
 }
 
 def collect_emails(max_orders):
