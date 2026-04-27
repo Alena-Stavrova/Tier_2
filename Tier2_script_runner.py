@@ -8,7 +8,7 @@ import HU_LVH_tier2 as hu_lvh
 import PL_LVH_tier2 as pl_lvh
 # EU Ermenrichs
 import CZ_ERM_tier2 as cz_erm
-# import HU_ERM_tier_2 as hu_erm
+import HU_ERM_tier2 as hu_erm
 # import IT_ERM_tier_2 as it_erm
 import PL_ERM_tier2 as pl_erm
 
@@ -22,7 +22,7 @@ script_modules = {
     }
 
 script_modules = {
-     'CZ_ERM': cz_erm
+     'HU_ERM': hu_erm
     }
 
 MAX_ORDERS_PER_BRAND = {
