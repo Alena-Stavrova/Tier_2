@@ -962,16 +962,15 @@ def generate_test_plan(order):
         d for d in order.delivery_options
         if d.get('is_third_party', False)
     ]
-    print(third_party_deliveries) ####
 
     third_party_payments = [
         p for p in order.payment_options
         if p.get('is_third_party', False)
     ]
-    print(third_party_payments) ####
 
     plan = []
     uncovered_payments = set(p['en_name'] for p in third_party_payments)
+    print(uncovered_payments) ####
 
     # Pass 1: coverage-optimized (greedy by delivery)
     for delivery in third_party_deliveries:
@@ -988,8 +987,11 @@ def generate_test_plan(order):
 
             if compatible_third_party:
                 chosen_payment = random.choice(compatible_third_party)
+                print(f"Chosen payment: {chosen_payment}")
                 uncovered_payments.discard(chosen_payment['en_name'])
+                print(f"Uncovered payments: {uncovered_payments}")
             else:
+                print("All payments covered")
                 # All payments covered, fallback to any compatible third-party
                 compatible_third_party = [
                     p for p in compatible_payments 

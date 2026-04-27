@@ -31,7 +31,7 @@ script_modules = {
 
 MAX_ORDERS_PER_BRAND = {
     'Levenhuk': 6,  # BG - 1, EU - 2, HU - 1, PL - 2 
-    'Ermenrich': 7 # CZ - 2, HU - 1, IT - 2, PL - 2
+    'Ermenrich': 8 # CZ - 2, HU - 1, IT - 2-3, PL - 2
 }
 
 def collect_emails(max_orders):
@@ -44,8 +44,9 @@ def collect_emails(max_orders):
         emails.append(email)
     return emails
 
-brand = 'Ermenrich'  # Make this automatic later ###
-max_orders = MAX_ORDERS_PER_BRAND[brand]
+max_orders = 0
+for key in MAX_ORDERS_PER_BRAND:
+    max_orders += MAX_ORDERS_PER_BRAND[key]
 emails = collect_emails(max_orders)
 
 # Initialize test data
