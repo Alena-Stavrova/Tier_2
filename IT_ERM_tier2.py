@@ -986,7 +986,6 @@ def generate_test_plan(order):
 
     plan = []
     uncovered_payments = set(p['en_name'] for p in third_party_payments)
-    print(uncovered_payments) ####
 
     # Pass 1: coverage-optimized (greedy by delivery)
     for delivery in third_party_deliveries:
@@ -1003,9 +1002,7 @@ def generate_test_plan(order):
 
             if compatible_third_party:
                 chosen_payment = random.choice(compatible_third_party)
-                print(f"Chosen payment: {chosen_payment}")
                 uncovered_payments.discard(chosen_payment['en_name'])
-                print(f"Uncovered payments: {uncovered_payments}")
             else:
                 print("All payments covered")
                 # All payments covered, fallback to any compatible third-party
@@ -1186,7 +1183,7 @@ def execute_single_order(order):
         else:
             print("Order number: order wasn't placed")
         print(f"Chosen SKU: {order.sku['selected']}")
-        print(f"Item price: {order.summary['basket_price']} Ft")
+        print(f"Item price: €{order.summary['basket_price']}")
         print(f"Delivery option: {order.summary['delivery_option']}")
         print(f"Payment option: {order.summary['payment_option']}")
 
@@ -1207,30 +1204,47 @@ def execute_single_order(order):
     finally:
         driver.quit()
 
-def run_test_plan(order):
+def run_test_plan(order, emails, order_counter):
     plan = generate_test_plan(order)
     c = 1
+    email_index = 0
+    local_counter = order_counter  # Continuation of brand-wide count
    
     for combo in plan:
-        # Set the specific delivery/payment
+        # Check if we need to switch email mid-script
+        if local_counter > 0 and local_counter % 5 == 0:
+            email_index += 1
+            if email_index < len(emails):
+                order.user_email = emails[email_index]
+                print(f"Switched to email: {order.user_email}")
+            else:
+                print("✗ Out of emails! Cannot place more orders.")
+                break
+
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
         order.sku['price_class'] = combo['price_class']
         print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
         execute_single_order(order)
         c += 1
+        local_counter += 1
     
-    return len(plan)
+    orders_made = c - 1  # Actual orders placed
+    # Return how many emails were used (0-indexed)
+    return orders_made, email_index
 
-def main_it_erm(email, phone):
+def main_it_erm(email, phone, emails=None, order_counter=0):
     global driver, wait
+
+    if emails is None:
+        emails = [email]  # Backward compatibility
 
     order = OrderContextIT()
     order.user_email = email
     order.user_phone = phone
 
-    orders_made = run_test_plan(order)
-    return orders_made
+    orders_made, email_index = run_test_plan(order, emails, order_counter)
+    return orders_made, email_index
 
 if __name__ == "__main__":
     main_it_erm()

@@ -1221,30 +1221,48 @@ def execute_single_order(order):
     finally:
         driver.quit()
 
-def run_test_plan(order):
+def run_test_plan(order, emails, order_counter):
     plan = generate_test_plan(order)
     c = 1
-   
+    email_index = 0
+    local_counter = order_counter  # Continuation of brand-wide count
+    
     for combo in plan:
-        # Set the specific delivery/payment
+        # Check if we need to switch email mid-script
+        if local_counter > 0 and local_counter % 5 == 0:
+            email_index += 1
+            if email_index < len(emails):
+                order.user_email = emails[email_index]
+                print(f"Switched to email: {order.user_email}")
+            else:
+                print("✗ Out of emails! Cannot place more orders.")
+                break
+        
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
         order.sku['price_class'] = combo['price_class']
-        print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
+        
+        print(f'COMBO {c}: {order.selected_delivery["local_name"]} + {order.selected_payment["local_name"]}')
         execute_single_order(order)
         c += 1
+        local_counter += 1
     
-    return len(plan)
+    orders_made = c - 1  # Actual orders placed
+    # Return how many emails were used (0-indexed)
+    return orders_made, email_index
 
-def main_hu_erm(email, phone):
+def main_hu_erm(email, phone, emails=None, order_counter=0):
     global driver, wait
-
+    
+    if emails is None:
+        emails = [email]  # Backward compatibility
+    
     order = OrderContextHU()
     order.user_email = email
     order.user_phone = phone
-
-    orders_made = run_test_plan(order)
-    return orders_made
+    
+    orders_made, email_index = run_test_plan(order, emails, order_counter)
+    return orders_made, email_index
 
 if __name__ == "__main__":
     main_hu_erm()
