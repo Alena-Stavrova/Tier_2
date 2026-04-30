@@ -251,11 +251,11 @@ class OrderContextIT(ParentContext):
         if not self.selected_delivery:
             return None, None
 
-        delivery_name = self.selected_delivery['local_name']
+        delivery_name = self.selected_delivery['en_name']
         price_class = self.sku['price_class']  
 
         # Express delivery
-        if delivery_name == 'consegna espressa':
+        if delivery_name == 'express':
             fee = self.fees['shipping']['express']['any']
             return fee, None  # Return display string only
         

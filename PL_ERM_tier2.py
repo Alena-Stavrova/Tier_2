@@ -174,7 +174,7 @@ class OrderContextPL(ParentContext):
                 'local_name': 'dostawa kurierem',
                 'en_name': 'courier',
                 'opt_id': 'ID_SHIPPING_METHOD_ID_5',
-                # 'is_default': True,
+                'is_default': True,
                 'is_third_party': True
                 },
             {            
@@ -433,7 +433,7 @@ def is_item_available(order):
         search_for_sku(sku)
         price_text = driver.find_element(By.CLASS_NAME, "product-card__price").text.lower()
         # Check language file for the translations: out of stock, discontinued, coming soon
-        unavailable_indicators = ['vyprodáno', 'už není v nabídce', 'již brzy na skladě']
+        unavailable_indicators = ['niedostępne', 'wycofano ze sprzedaży', 'dostępne wkrótce']
         if any(indicator in price_text for indicator in unavailable_indicators):
             return False, price_text
         else:

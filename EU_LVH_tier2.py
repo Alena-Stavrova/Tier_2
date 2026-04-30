@@ -180,8 +180,8 @@ class OrderContextEU(ParentContext):
     
         self.payment_options = [
                 {
-                    'local_name': 'Bank transfer',
-                    'en_name': 'Bank transfer',
+                    'local_name': 'bank transfer',
+                    'en_name': 'bank transfer',
                     'opt_id': 'ID_PAY_SYSTEM_ID_2',
                     'is_default': True,
                     'compatible_with': {
@@ -190,8 +190,8 @@ class OrderContextEU(ParentContext):
                     }    
                 },
                 {
-                    'local_name': 'Credit/debit card',
-                    'en_name': 'Credit/debit card',
+                    'local_name': 'credit/debit card',
+                    'en_name': 'credit/debit card',
                     'opt_id': 'ID_PAY_SYSTEM_ID_50',
                     'is_third_party': True,
                     'compatible_with': {
@@ -200,8 +200,8 @@ class OrderContextEU(ParentContext):
                     }
                 },
                 {
-                    'local_name': 'PayPal',
-                    'en_name': 'PayPal',
+                    'local_name': 'paypal',
+                    'en_name': 'paypal',
                     'opt_id': 'ID_PAY_SYSTEM_ID_5',
                     'is_third_party': True,
                     'compatible_with': {
@@ -388,7 +388,7 @@ def is_item_available(order):
         search_for_sku(sku)
         price_text = driver.find_element(By.CLASS_NAME, "catalog-card__price").text.lower()
         # Check language file for the translations: out of stock, discontinued, coming soon
-        unavailable_indicators = ['няма в наличност', 'прекратено производство', 'очаквайте скоро']
+        unavailable_indicators = ['out of stock', 'discontinued', 'coming soon']
         if any(indicator in price_text for indicator in unavailable_indicators):
             return False, price_text
         else:
@@ -1158,30 +1158,47 @@ def execute_single_order(order):
     finally:
         driver.quit()
 
-def run_test_plan(order):
+def run_test_plan(order, emails, order_counter):
     plan = generate_test_plan(order)
     c = 1
+    email_index = 0
+    local_counter = order_counter  # Continuation of brand-wide count
    
     for combo in plan:
-        # Set the specific delivery/payment
+        # Check if we need to switch email mid-script
+        if local_counter > 0 and local_counter % 5 == 0:
+            email_index += 1
+            if email_index < len(emails):
+                order.user_email = emails[email_index]
+                print(f"Switched to email: {order.user_email}")
+            else:
+                print("✗ Out of emails! Cannot place more orders.")
+                break
+
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
         order.sku['price_class'] = combo['price_class']
         print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
         execute_single_order(order)
         c += 1
+        local_counter += 1
     
-    return len(plan)
+    orders_made = c - 1  # Actual orders placed
+    # Return how many emails were used (0-indexed)
+    return orders_made, email_index
 
-def main_eu_lvh(email, phone):
+def main_eu_lvh(email, phone, emails=None, order_counter=0):
     global driver, wait
+
+    if emails is None:
+        emails = [email]  # Backward compatibility
 
     order = OrderContextEU()
     order.user_email = email
     order.user_phone = phone
 
-    orders_made = run_test_plan(order)
-    return orders_made
+    orders_made, email_index = run_test_plan(order, emails, order_counter)
+    return orders_made, email_index
 
 if __name__ == "__main__":
     main_eu_lvh()
