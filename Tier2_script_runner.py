@@ -27,11 +27,6 @@ script_modules = {
     }
 }
 
-script_modules = {
-    'ermenrich': {
-        'CZ_ERM': cz_erm
-    }
-}
 
 # Max orders per brand (with buffer for IT's variability)
 num_orders_per_brand = {
