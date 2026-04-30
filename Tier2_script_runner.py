@@ -27,6 +27,12 @@ script_modules = {
     }
 }
 
+script_modules = {
+    'ermenrich': {
+        'CZ_ERM': cz_erm
+    }
+}
+
 # Max orders per brand (with buffer for IT's variability)
 num_orders_per_brand = {
     'levenhuk': 6,    # BG-1, EU-2, HU-1, PL-2
