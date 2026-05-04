@@ -754,28 +754,44 @@ def fill_order_form(user_email, test_phone):
                     
         # City field 
         try:
-            # Wait for the city field to be interactable
-            city_field = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.ID, "CITY_SHIP"))
+            # Wait for the whole order form container to be fully rendered
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "CART-SIDEBAR-TARGET"))
             )
+            time.sleep(1)  # Small buffer for JS layout calculations
+    
+            # Now wait for city field specifically, with retry
+            city_field = None
+            for attempt in range(3):
+                try:
+                    city_field = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.ID, "bx-input-order-CITY_SHIP"))
+                    )
             
-            # Scroll to the element to ensure it's in view
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", city_field)
-            time.sleep(0.5)
+                    # Scroll into view
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center'});", 
+                        city_field
+                    )
+                    time.sleep(0.3)
             
-            # Click on the field to ensure focus
-            city_field.click()
-            time.sleep(0.5)
+                    city_field.click()
+                    break  # Success!
             
-            # Clear and fill the field
+                except Exception as click_error:
+                    print(f"Attempt {attempt + 1}/3 failed: {str(click_error)[:100]}")
+                    time.sleep(2)
+    
+            if city_field is None:
+                raise Exception("Failed to click city field after 3 attempts")
+    
             city_field.clear()
             city_field.send_keys(city_name)
             print("City field filled")
-            
-            # Press Tab to move to next field (this might help with form validation)
+    
             city_field.send_keys(Keys.TAB)
             time.sleep(0.5)
-            
+    
         except Exception as e:
             print(f"✗ Error with city field: {str(e)}")
             take_screenshot("city_field_error")
