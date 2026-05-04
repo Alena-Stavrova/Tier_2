@@ -911,24 +911,24 @@ def verify_order_fee(order):
         fee_element = wait.until(
             EC.presence_of_element_located((By.ID, "bx-cost-shipping"))
         )    
-        actual_fee = fee_element.text
-        print(f"Actual fee on page: '{actual_fee}'")
+        actual_fee_text = fee_element.text
+        print(f"Actual fee on page: '{actual_fee_text}'")
 
-        # Get expected fee from order context
-        expected_display, _ = order.get_expected_total_fee()
+        expected_display, expected_amount = order.get_expected_total_fee()
         order.summary['expected_fee'] = expected_display
+
+        if actual_fee_text == 'Ingyenes kiszállítás':
+            actual_fee = 0
+        else:
+            actual_fee = extract_price(actual_fee_text)
         
-        if expected_display is None:
-            print(f"✗ Can't determine expected fee")
-            return False, actual_fee
-        
-        if actual_fee == expected_display:
-            print(f"✓ Fee verified: {actual_fee}")
+        if actual_fee == expected_amount:
+            print(f"✓ Fee verified: {actual_fee} Ft")
             return True, actual_fee
         else:
             print(f"✗ Fee mismatch: Expected '{expected_display}', got '{actual_fee}'")
             return False, actual_fee
-            
+                
     except Exception as e:
         print(f"✗ Error verifying order fees: {str(e)}")
         take_screenshot("fee_verification_error")
@@ -1198,7 +1198,7 @@ def execute_single_order(order):
 
         # Shipping fees match check
         if fee_success:
-            print(f"Order fee (shipping + payment): ✓ As expected, {order.summary['order_fee']}")
+            print(f"Order fee (shipping + payment): ✓ As expected, {order.summary['order_fee']} Ft")
         else:
             print(f"✗ Shipping fees don't match: expected {order.summary['expected_fee']}, got {order.summary['order_fee']}")
         
@@ -1215,32 +1215,32 @@ def execute_single_order(order):
 def run_test_plan(order, emails, order_counter):
     plan = generate_test_plan(order)
     c = 1
-    email_index = 0
+    email_switches = 0
     local_counter = order_counter  # Continuation of brand-wide count
-    
+   
     for combo in plan:
         # Check if we need to switch email mid-script
         if local_counter > 0 and local_counter % 5 == 0:
-            email_index += 1
-            if email_index < len(emails):
-                order.user_email = emails[email_index]
+            email_switches += 1
+            if email_switches < len(emails):
+                order.user_email = emails[email_switches]
                 print(f"Switched to email: {order.user_email}")
             else:
                 print("✗ Out of emails! Cannot place more orders.")
                 break
-        
+
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
         order.sku['price_class'] = combo['price_class']
-        
-        print(f'COMBO {c}: {order.selected_delivery["local_name"]} + {order.selected_payment["local_name"]}')
+
+        print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
         execute_single_order(order)
         c += 1
         local_counter += 1
     
     orders_made = c - 1  # Actual orders placed
     # Return how many emails were used (0-indexed)
-    return orders_made, email_index
+    return orders_made, email_switches
 
 def main_hu_erm(email, phone, emails=None, order_counter=0):
     global driver, wait

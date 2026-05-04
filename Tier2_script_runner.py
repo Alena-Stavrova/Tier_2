@@ -6,6 +6,7 @@ import BG_LVH_tier2 as bg_lvh
 import EU_LVH_tier2 as eu_lvh
 import HU_LVH_tier2 as hu_lvh
 import PL_LVH_tier2 as pl_lvh
+# EU Ermenrichs
 import CZ_ERM_tier2 as cz_erm
 import HU_ERM_tier2 as hu_erm
 import IT_ERM_tier2 as it_erm
@@ -27,6 +28,12 @@ script_modules = {
     }
 }
 
+script_modules = {
+    'levenhuk': {
+        'HU_LVH': hu_lvh
+    }
+}
+
 
 # Max orders per brand (with buffer for IT's variability)
 num_orders_per_brand = {
@@ -34,7 +41,7 @@ num_orders_per_brand = {
     'ermenrich': 8    # CZ-2, HU-1, IT-3(max), PL-2
 }
 
-# Collect all emails upfront (2 per brand since max is 8, and 8/5 → 2)
+# Collect all emails upfront (2 per brand since max is 8, and 8/5 > 1)
 all_emails = {}
 for brand, max_orders in num_orders_per_brand.items():
     emails_needed = (max_orders + 4) // 5  # Ceiling division
@@ -44,7 +51,6 @@ for brand, max_orders in num_orders_per_brand.items():
         email = input(f"Enter email {i+1} for {brand}: ")
         brand_emails.append(email)
     all_emails[brand] = brand_emails
-    print(all_emails)
 
 test_phone = "+79444444444"
 
@@ -66,10 +72,10 @@ for brand, modules in script_modules.items():
         print(f"Backup emails available: {len(remaining_emails)-1}")
         print(f"{'='*60}")
         
-        orders_made, email_index = main_function(current_email, test_phone, remaining_emails, order_counter)
+        orders_made, new_email_index = main_function(current_email, test_phone, remaining_emails, order_counter)
         order_counter += orders_made
         
-        # Check if we need to switch email BEFORE the next script
-        if order_counter >= 5 and email_index + 1 < len(emails):
-            email_index += 1
-            print(f"Switching to next email: {emails[email_index]}")
+        # Update email_index from what the script tells us
+        email_index += new_email_index  # Add the relative index change
+        
+        print(f"Orders so far for {brand}: {order_counter}, Email index: {email_index}")
