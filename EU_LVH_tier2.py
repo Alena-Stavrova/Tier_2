@@ -756,7 +756,7 @@ def fill_order_form(user_email, test_phone):
         try:
             # Wait for the whole order form container to be fully rendered
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "CART-SIDEBAR-TARGET"))
+                EC.presence_of_element_located((By.ID, "bx-soa-order-form"))
             )
             time.sleep(1)  # Small buffer for JS layout calculations
     
@@ -765,7 +765,7 @@ def fill_order_form(user_email, test_phone):
             for attempt in range(3):
                 try:
                     city_field = WebDriverWait(driver, 10).until(
-                        EC.element_to_be_clickable((By.ID, "bx-input-order-CITY_SHIP"))
+                        EC.element_to_be_clickable((By.ID, "CITY_SHIP"))
                     )
             
                     # Scroll into view
