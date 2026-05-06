@@ -15,7 +15,7 @@ import sys
 # Initialize driver with None (to be changed later)
 driver = None
 wait = None
-website_main = "https://ru.ermenrich.com/"
+website_main = "https://ermenrich.com/"
 
 # Create the optimized driver (loads fast, limits images)
 def create_optimized_driver():
@@ -64,9 +64,8 @@ class ParentContext:
 
         self.sku = {
             'selected': None,
-            'price_class': None,
-            # No delivery/payment options requiring certain price classes 
-            # This parameter is not currently used in the code
+            'region': None,
+            'price_class': None, # Just 1 price class here (price class 0)
             'price_class_type': 'flexible',  
             'unavailable': []   # Track unavailable SKUs
         }
@@ -90,8 +89,7 @@ class ParentContext:
     
     def get_all_skus(self):
         # Get all SKUs from both price classes
-        all_skus = self.sku_lists['price_classes'][0] + self.sku_lists['price_classes'][1]
-        return all_skus
+        all_skus = self.sku_lists['price_classes'][0] 
     
     def mark_sku_unavailable(self, sku):
         # Add a SKU to the unavailable list
@@ -112,30 +110,24 @@ class ParentContext:
         return None
 
     def get_available_payment_options(self):
-        if not self.sku.get('price_class') is None:
-            price_class = self.sku['price_class']
-        else:
-            price_class = None
-        
-        delivery_name = self.selected_delivery['local_name'] if self.selected_delivery else None
-
-        available = []
-        for option in self.payment_options:
-            compatible = option.get('compatible_with', {})
-            
-            # Check delivery compatibility (if delivery is set)
-            delivery_ok = True
-            if delivery_name and 'delivery' in compatible:
-                delivery_ok = delivery_name in compatible['delivery']
-            
-            # Check price class compatibility (if price class is set)
-            price_ok = True
-            if price_class is not None and 'price_class' in compatible:
-                price_ok = price_class in compatible['price_class']
-            
-            if delivery_ok and price_ok:
-                available.append(option)
-        
+        if not self.selected_delivery:
+            return self.payment_options.copy()
+    
+        delivery = self.selected_delivery
+        compatible = delivery.get('compatible_with', {})
+        allowed_payments = compatible.get('payment', [])
+    
+        # Also check region if set
+        region = self.sku.get('region')
+        allowed_regions = compatible.get('region', [])
+    
+        if region and allowed_regions and region not in allowed_regions:
+            return []  # This delivery isn't available in this region
+    
+        available = [
+            p for p in self.payment_options
+            if p['en_name'] in allowed_payments
+        ]
         return available
 
     def get_default_payment(self):
@@ -254,7 +246,7 @@ class OrderContextHU(ParentContext):
                 'en_name': 'credit card',
                 'opt_id': 'ID_PAY_SYSTEM_ID_11',
                 'is_default': True,
-                'is_third_party': True
+                'is_third_party': True,
             },
             {
                 'local_name': 'банковский перевод',
@@ -276,46 +268,31 @@ class OrderContextHU(ParentContext):
             },
              {   'local_name': 'наложенный платеж',
                 'en_name': 'cash on delivery (ems)',
-                'opt_id': 'ID_PAY_SYSTEM_ID_5',
+                'opt_id': 'ID_PAY_SYSTEM_ID_9',
             }
         ]
 
         self.fees = {
             'shipping': {                
                 'shop pickup (St. Petersburg)': {
-                    'any': 'Бесплатная доставка'
-                },
-                'shop pickup (Moscow)': {
-                    'any': 'Бесплатная доставка'
-                },
-                'courier (Moscow)': {
-                    'any': {
-                        'amount': 350,
-                        'display': '350 ₽'
-                    }
-                },
-                'express courier (Moscow)': {
-                    'any': {
-                        'amount': 500,
-                        'display': '500 ₽'
-                    }
-                } #### Stopped here
-            },
-            'payment': {
-                'cash': {
-                    'courier': {
-                        'amount': 250,
-                        'display': '250 Ft'
+                        'display': 'Бесплатная доставка',
+                        'amount': 0
                     },
-                    'shop pickup': {
-                        'amount': 0,
-                        'display': None
-                    }
-                },
-                'other': {
-                    'amount': 0,
-                    'display': None  # No additional fee
-                }
+
+                'shop pickup (Moscow)': {
+                    'display': 'Бесплатная доставка',
+                    'amount': 0
+                    },
+
+                'courier (Moscow)': {
+                    'display': '350 ₽',
+                    'amount': 350
+                    },
+
+                'express courier (Moscow)': {
+                    'display': '500 ₽',
+                    'amount': 500
+                    } 
             }
         }
     
@@ -323,57 +300,17 @@ class OrderContextHU(ParentContext):
     def get_expected_shipping_fee(self):
         if not self.selected_delivery:
             return None, None
-
-        delivery_name = self.selected_delivery['en_name']
-        price_class = self.sku['price_class']  
-
-        if delivery_name == 'shop pickup':
-            fee = self.fees['shipping']['shop pickup']['any']
-            return fee, None  # Return display string only
-        
-        # Courier
-        if price_class == 0:  
-            tier = 'under_50000'
-        else:  
-            tier = 'over_50000'
-
-        fee_data = self.fees['shipping']['courier'][tier]
-        return fee_data['display'], fee_data['amount']
-
-    def get_expected_payment_fee(self):
-        if not self.selected_payment:
-            return None, None
-        
-        is_cash = self.selected_payment.get('is_cash', False)
-        delivery = self.selected_delivery['en_name']
-        
-        if is_cash:
-            fee_data = self.fees['payment']['cash'][delivery]
+        # Our own deliveries with predetermined costs
+        elif not self.selected_delivery['is_third_party']:
+            delivery_name = self.selected_delivery['en_name']
+            fee_data = self.fees['shipping'][delivery_name] # dictionary
             return fee_data['display'], fee_data['amount']
+        # Third party options, shows costs dynamically
         else:
-            return None, 0  # No payment fee
+            fee_element = driver.find_element(By.ID, 'bx-cost-shipping').text
+            fee_amount = extract_price(fee_element)
+            return fee_element, fee_amount
 
-    def get_expected_total_fee(self):
-        ship_display, ship_amount = self.get_expected_shipping_fee()
-        pay_display, pay_amount = self.get_expected_payment_fee()
-        
-        # Calculate total amount (handle None as 0)
-        ship_amount = ship_amount if ship_amount is not None else 0
-        pay_amount = pay_amount if pay_amount is not None else 0
-        total_amount = ship_amount + pay_amount
-        
-        # Format display string
-        if total_amount == 0:
-            display = 'Ingyenes kiszállítás'
-        else:
-            display = f'{total_amount} Ft'
-        
-        return display, total_amount
-
-def determine_price_class(payment_option):
-    price_class_list = payment_option['compatible_with']['price_class']
-    price_class = random.choice(price_class_list)
-    return price_class
 
 # Choose random sku, return a string and int price class
 def choose_sku(order):
@@ -982,7 +919,7 @@ def verify_order_fee(order):
         actual_fee_text = fee_element.text
         print(f"Actual fee on page: '{actual_fee_text}'")
 
-        expected_display, expected_amount = order.get_expected_total_fee()
+        expected_display, expected_amount = order.get_expected_shipping_fee()
         order.summary['expected_fee'] = expected_display
 
         if actual_fee_text == 'Ingyenes kiszállítás':
@@ -1051,6 +988,8 @@ def get_order_number():
         return False
 
 def generate_test_plan(order):
+    # Pick a region randomly and filter deliveries by it
+    # Or include region as a dimension in your generate_test_plan
     third_party_deliveries = [
         d for d in order.delivery_options
         if d.get('is_third_party', False)
