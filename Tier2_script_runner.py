@@ -28,11 +28,6 @@ script_modules = {
     }
 }
 
-script_modules = {
-    'levenhuk': {
-        'HU_LVH': hu_lvh
-    }
-}
 
 
 # Max orders per brand (with buffer for IT's variability)

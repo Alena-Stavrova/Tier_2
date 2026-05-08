@@ -938,6 +938,71 @@ def fill_order_form(user_email, test_phone):
             print(f"✗ Error with city field: {str(e)}")
             take_screenshot("city_field_error")
             return False
+        
+    # Address field
+        try:
+            address_field = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.ID, "ADDRESS_SHIP"))
+            )
+            
+            # Click to ensure focus
+            address_field.click()
+            time.sleep(0.5)
+            
+            address_field.clear()
+            address_field.send_keys(ship_to['address'])
+            print("Address field filled")
+            
+            # Press Tab to move to next field
+            address_field.send_keys(Keys.TAB)
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"✗ Error with address field: {str(e)}")
+            take_screenshot("address_field_error")
+            return False
+        
+        # Postal code field
+        try:
+            postal_code_field = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.ID, "ZIP_SHIP"))
+            )
+            
+            # Click to ensure focus
+            postal_code_field.click()
+            time.sleep(0.5)
+            
+            postal_code_field.clear()
+            postal_code_field.send_keys(ship_to['postal_code'])
+            print("Postal code field filled")
+            
+        except Exception as e:
+            print(f"✗ Error with postal code field: {str(e)}")
+            take_screenshot("postal_code_field_error")
+            return False
+        
+        # Billing address is the same as shipping (default tick remains)
+        print("Billing address remains same as shipping (default)")
+
+        # Order comment (2 lines)
+        try:
+            comment_field = driver.find_element(By.ID, "ORDER_DESCRIPTION")
+            driver.execute_script('arguments[0].value = "Alena Auto Test\\nThis order was made by Alena\'s helpful minions";', comment_field)
+            print("Comment field filled")
+        
+        except Exception as e:
+            print(f"✗ Error with comment field: {str(e)}")
+            take_screenshot("comment_field_error")
+        
+        print("✓ Order form filled successfully")
+        return True
+        
+    except Exception as e:
+        print(f"✗ Error filling order form: {str(e)}")
+        # Add traceback to see where it's failing
+        traceback.print_exc()
+        take_screenshot("order_form_error")
+        return False
 
 def verify_order_fee(order):
     try:

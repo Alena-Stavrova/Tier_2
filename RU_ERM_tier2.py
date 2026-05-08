@@ -161,6 +161,10 @@ class OrderContextHU(ParentContext):
         }
      
         self.delivery_options = [
+            # Moscow default = Доставка курьером, no action
+            # St. Pete default = Самовывоз из магазина + confirm shop
+            # Regions default = Доставка курьером СДЭК, no action
+
             {            
                 'local_name': 'самовывоз (Санкт-Петербург)',
                 'en_name': 'shop pickup (St. Petersburg)',
@@ -300,16 +304,22 @@ class OrderContextHU(ParentContext):
     def get_expected_shipping_fee(self):
         if not self.selected_delivery:
             return None, None
-        # Our own deliveries with predetermined costs
-        elif not self.selected_delivery['is_third_party']:
-            delivery_name = self.selected_delivery['en_name']
-            fee_data = self.fees['shipping'][delivery_name] # dictionary
-            return fee_data['display'], fee_data['amount']
-        # Third party options, shows costs dynamically
+        elif self.selected_delivery.get('is_third_party'):
+            # Guard against calling before we're on the order page
+            if driver is None:
+                return None, None
+            # Third party deliveries, will always have numbers
+            try:
+                fee_element = driver.find_element(By.ID, 'bx-cost-shipping').text
+                fee_amount = extract_price(fee_element)
+                return fee_element, fee_amount
+            except:
+                return None, None
+        # Our deliveries, may have numbers or "Бесплатная доставка"
         else:
-            fee_element = driver.find_element(By.ID, 'bx-cost-shipping').text
-            fee_amount = extract_price(fee_element)
-            return fee_element, fee_amount
+            delivery_name = self.selected_delivery['en_name']
+            fee_data = self.fees['shipping'].get(delivery_name)
+            return fee_data['display'], fee_data['amount'] if fee_data else (None, None)
 
 
 # Choose random sku, return a string and int price class
@@ -332,47 +342,48 @@ def choose_sku(order):
     print("✗ WARNING: No available SKUs in either price class!")
     return None
 
-def choose_address():
+def choose_address(order):
     # Define a list of shipping addresses
-    shipping_addresses = [
-    {
-        'country': 'Magyarország',
-        'city': 'Budapest',
-        'address': 'Egressy út 24',
-        'postal_code': '1149'
-    },
-    {
-        'country': 'Magyarország',
-        'city': 'Debrecen', 
-        'address': 'Gogol u. 25',
-        'postal_code': '4034'
-    },
-    {
-        'country': 'Magyarország',
-        'city': 'Szeged',
-        'address': ' Rom u. 9',
-        'postal_code': '6723'
+    shipping_addresses = {
+    'Moscow': [
+        # Maybe include zip code to check later?
+        '109125 Москва Саратовская 19 строение 5', # Google/Dadata zips don't match, used Dadata
+        '109028 Москва Яузский бульвар 15',
+        '101000 Москва Чистопрудный бульвар 10 строение 2'
+    ],
+    'St. Petersburg': [
+        '194017 СПб пр. Энгельса 66',
+        '197101 СПб Большая Пушкарская 46 лит. А', # Google/Dadata zips don't match, used Dadata
+        '191180 СПб наб. Реки Фонтанки 92'
+    ],
+    'regions': [
+        '236004 Калининград, Аллея Смелых 25',
+        '614051 Пермь Пономарева 56',
+        '185031 Петрозаводск Кондопожская 8',
+        '450080 Уфа Менделеева 191А',
+        '364024 Грозный Лорсанова 28'# Google/Dadata zips don't match, used Dadata
+    ] 
     }
-]
-    
-    address = shipping_addresses[random.randint(0,2)] 
-    return(address) #returns a dictionary
+    chosen_region = order.sku.get('region')
+    region_lib = shipping_addresses[chosen_region]
+
+    address = region_lib[random.choice()] 
+    return(address) #returns a string
 
 def extract_price(price_text):
     # Remove all characters except digits and the comma/dot
     # Only EU, US have dot (23.95 EU - no need to replace), the rest have comma
-    clean_text = re.sub(r'[^\d,]', '', price_text)
-    # Replace comma with dot 
-    clean_text = clean_text.replace(',', '.')   
+    clean_text = re.sub(r'[^\d]', '', price_text)
     try:
-        return float(clean_text)
+        return int(clean_text)
     except ValueError:
         return None
   
 def close_cookie_popup():
     try:
         accept_button = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, ".cky-btn.cky-btn-accept"))
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, 
+                "#cookie_notice_alert a.btn.btn-primary"))
         )
         accept_button.click()
         print("Cookie popup closed")
@@ -442,7 +453,7 @@ def is_item_available(order):
         search_for_sku(sku)
         price_text = driver.find_element(By.CLASS_NAME, "product-card__price").text.lower()
         # Check language file for the translations: out of stock, discontinued, coming soon
-        unavailable_indicators = ['nincs raktáron', 'megszűnt', 'hamarosan érkezik']
+        unavailable_indicators = ['нет в наличии', 'снят с производства', 'скоро в продаже']
         if any(indicator in price_text for indicator in unavailable_indicators):
             return False, price_text
         else:
@@ -621,59 +632,97 @@ def proceed_to_checkout():
         print(f"Failed to proceed to checkout: {str(e)}")
         take_screenshot("checkout_error")
         return False
+
+def _select_pickup_location(order):
+    # Handle ALL pickup types: Moscow shop, St. Pete shop, SDEK pickup points.
+    # Picks a random location, avoiding pre-pay-only shops (text-danger warning).
+    try:
+        # Wait for the pickup list to appear
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "delivery-map__list"))
+        )
+        time.sleep(0.5)
+        
+        # Get all pickup items
+        all_items = driver.find_elements(By.CLASS_NAME, "delivery-map__item")
+        
+        if not all_items:
+            print("✗ No pickup locations found")
+            return False
+        
+        # Filter out pre-pay-only locations (they have text-danger warning)
+        usable_items = []
+        for item in all_items:
+            danger_warnings = item.find_elements(By.CLASS_NAME, "text-danger")
+            if not danger_warnings:
+                usable_items.append(item)
+        
+        if not usable_items:
+            print("✗ All locations are pre-pay only!")
+            take_screenshot("all_prepay_only")
+            return False
+        
+        print(f"Found {len(usable_items)} usable locations (filtered out {len(all_items) - len(usable_items)} pre-pay only)")
+        
+        # Pick a random location
+        chosen = random.choice(usable_items)
+        
+        # Get the location name for logging
+        title_elem = chosen.find_element(By.CLASS_NAME, "delivery-map__title")
+        location_name = title_elem.text.split("\n")[0][:80]  # First line, truncated
+        print(f"Selected: {location_name}")
+        
+        # Find and click the "Заберу здесь" button
+        pickup_button = chosen.find_element(By.CSS_SELECTOR, "button[data-set-shop]")
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", pickup_button)
+        time.sleep(0.3)
+        pickup_button.click()
+        time.sleep(1)
+        
+        print(f"✓ Pickup location confirmed")
+        return True
+        
+    except Exception as e:
+        print(f"✗ Failed to select pickup location: {str(e)}")
+        traceback.print_exc()
+        take_screenshot("pickup_selection_error")
+        return False
     
 def click_delivery_option(order):
     try:
-        selected = order.selected_delivery
-
-        selected_name = selected['local_name']
-        selected_id = selected['opt_id']
+        delivery = order.selected_delivery
+        delivery_name = delivery['local_name']
+        delivery_en = delivery['en_name']
+        delivery_id = delivery['opt_id']
         
-        # Get default delivery from order context
-        default = order.get_default_delivery()
-        default_name = default['local_name'] if default else None
+        # Step 1: Click the delivery radio/label (regardless of whether it's default)
+        # This is safe — clicking an already-selected radio is a no-op
+        try:
+            delivery_label = wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, f"label[for='{delivery_id}']"))
+            )
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", delivery_label
+            )
+            time.sleep(0.3)
+            delivery_label.click()
+            time.sleep(0.5)
+            print(f"Selected delivery: {delivery_name}")
+        except Exception as e:
+            print(f"✗ Failed to click delivery: {str(e)}")
+            return False
         
-        # Only interact with UI if not default
-        if selected_name != default_name:
-            try:
-                # Find and click the delivery option label
-                delivery_label = wait.until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, 
-                        f"label[for='{selected_id}']"))
-                )
-                print("Found delivery label, attempting to click...")
-                
-                # Scroll to the label
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", 
-                    delivery_label
-                )
-                time.sleep(0.5)
-                delivery_label.click()
-                time.sleep(1)
-                
-                try:                
-                    shop_button = WebDriverWait(driver, 10).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-set-shop][data-reseller-id='37']"))
-                    )
-                    shop_button.click()
-                    time.sleep(1)
-                    print("✓ Shop pickup location selected")
-                    return True
-                
-                except Exception as e:
-                    print(f"Could not select shop pickup location: {str(e)}")
-                    return False
-                
-            except Exception as e:
-                print(f"✗ Failed to click delivery option {selected_name}: {str(e)}")
-                return False
-        else:
-            print(f"Using default delivery option ({default_name}), no action needed")
-            return True
-    
+        # Step 2: Handle sub-actions based on delivery type
+        if 'shop pickup' in delivery_en:
+            return _select_shop_pickup_location(order)
+        elif 'pickup (SDEK)' in delivery_en:
+            return _select_sdek_pickup_point(order)
+        # courier, express courier, EMS — no sub-action needed
+        
+        return True
+        
     except Exception as e:
-        print(f"✗ Error in delivery selection process: {str(e)}")
+        print(f"✗ Error in delivery selection: {str(e)}")
         take_screenshot("delivery_option_error")
         return False
 
