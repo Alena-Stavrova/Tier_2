@@ -816,7 +816,7 @@ def fill_order_form(user_email, test_phone):
                 EC.visibility_of_element_located((By.ID, "bx-input-order-FIO_SHIP"))
             )
             name_field.clear()
-            name_field.send_keys("Alena Auto Test")
+            name_field.send_keys("Алена Авто Тест")
             print("Name field filled")
         except Exception as e:
             print(f"✗ Error with name field: {str(e)}")
@@ -826,7 +826,7 @@ def fill_order_form(user_email, test_phone):
         # Order comment
         try:
             comment_field = driver.find_element(By.ID, "bx-input-order-USER_DESCRIPTION")
-            driver.execute_script('arguments[0].value = "Alena Auto Test\\nThis order was made by Alyona\'s helpful minions";', comment_field)
+            driver.execute_script('arguments[0].value = "Алена Авто Тест\\nЭтот заказ сделан моими усердными миньонами";', comment_field)
             print("Comment field filled")
         
         except Exception as e:
@@ -968,13 +968,13 @@ def verify_order_fee(order):
         expected_display, expected_amount = order.get_expected_shipping_fee()
         order.summary['expected_fee'] = expected_display
 
-        if actual_fee_text == 'Ingyenes kiszállítás':
+        if actual_fee_text == 'Бесплатная доставка':
             actual_fee = 0
         else:
             actual_fee = extract_price(actual_fee_text)
         
         if actual_fee == expected_amount:
-            print(f"✓ Fee verified: {actual_fee} Ft")
+            print(f"✓ Fee verified: {actual_fee} ₽")
             return True, actual_fee
         else:
             print(f"✗ Fee mismatch: Expected '{expected_display}', got '{actual_fee}'")
@@ -1011,7 +1011,7 @@ def place_order():
     
 def get_order_number():
     # Get the order number from the URL of the confirmation page
-    # URL is like: https://levenhuk.com/order/?ORDER_ID=T-B2C-US-41574
+    # URL is like: https://ermenrich.ru/order/?ORDER_ID=ERM-456258
     try:
         current_url = driver.current_url
         if "ORDER_ID=" in current_url:
@@ -1295,7 +1295,7 @@ def run_test_plan(order, emails, order_counter):
     # Return how many emails were used (0-indexed)
     return orders_made, email_switches
 
-def main_hu_erm(email, phone, emails=None, order_counter=0):
+def main_ru_erm(email, phone, emails=None, order_counter=0):
     global driver, wait
     
     if emails is None:
@@ -1309,5 +1309,5 @@ def main_hu_erm(email, phone, emails=None, order_counter=0):
     return orders_made, email_index
 
 if __name__ == "__main__":
-    main_hu_erm()
+    main_ru_erm()
 
