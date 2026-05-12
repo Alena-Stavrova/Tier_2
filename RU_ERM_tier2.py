@@ -695,8 +695,7 @@ def click_delivery_option(order):
         delivery_en = delivery['en_name']
         delivery_id = delivery['opt_id']
         
-        # Step 1: Click the delivery radio/label (regardless of whether it's default)
-        # This is safe — clicking an already-selected radio is a no-op
+        # Step 1: Click the delivery radio/label 
         try:
             delivery_label = wait.until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, f"label[for='{delivery_id}']"))
@@ -713,12 +712,10 @@ def click_delivery_option(order):
             return False
         
         # Step 2: Handle sub-actions based on delivery type
-        if 'shop pickup' in delivery_en:
-            return _select_shop_pickup_location(order)
-        elif 'pickup (SDEK)' in delivery_en:
-            return _select_sdek_pickup_point(order)
-        # courier, express courier, EMS — no sub-action needed
+        if 'shop pickup' in delivery_en or 'pickup (SDEK)' in delivery_en:
+            return _select_pickup_location(order)
         
+        # Courier, express courier, EMS — no sub-action needed
         return True
         
     except Exception as e:
