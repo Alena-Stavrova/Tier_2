@@ -15,7 +15,7 @@ import sys
 # Initialize driver with None (to be changed later)
 driver = None
 wait = None
-website_main = "https://ermenrich.com/"
+website_main = "https://ermenrich.ru/"
 
 # Create the optimized driver (loads fast, limits images)
 def create_optimized_driver():
@@ -324,7 +324,7 @@ class OrderContextHU(ParentContext):
 
 # Choose random sku, return a string and int price class
 def choose_sku(order):
-    price_class = order.sku['price_class']
+    price_class = 0
     sku_list = order.get_sku_list(price_class)
     available_skus = [
         str(sku) for sku in sku_list 
@@ -768,9 +768,9 @@ def click_payment_option(order):
         take_screenshot("payment_option_error")
         return False     
                                                                                                     
-def fill_order_form(user_email, test_phone):
+def fill_order_form(user_email, test_phone, order):
     try:
-        ship_to = choose_address() #is a dictionary
+        ship_to = choose_address(order) #is a dictionary
         country_name = ship_to['country']
         city_name = ship_to['city']
         print(f"Chosen address in: {country_name}, {city_name}")
@@ -1034,88 +1034,50 @@ def get_order_number():
         return False
 
 def generate_test_plan(order):
-    # Pick a region randomly and filter deliveries by it
-    # Or include region as a dimension in your generate_test_plan
     third_party_deliveries = [
         d for d in order.delivery_options
         if d.get('is_third_party', False)
     ]
 
+    # Just 1 payment, compatible with everything
     third_party_payments = [
         p for p in order.payment_options
         if p.get('is_third_party', False)
     ]
-
+    
     plan = []
-    uncovered_payments = set(p['en_name'] for p in third_party_payments)
+    used_deliveries = set()  # Track deliveries already tested in any region
 
-    # Pass 1: coverage-optimized (greedy by delivery)
+    delivery = random.choice(third_party_deliveries)
+    if len(third_party_payments) > 1:
+        print("Uh oh, more than 1 third party deliveries, need to update test plan generation")
+    else:
+        region = random.choice(delivery.get('compatible_with', {}).get('region', []))
+        plan.append({
+            'region': region,
+            'delivery': delivery,
+            'payment': third_party_payments[0]
+        })
+        used_deliveries.add(delivery['en_name'])
+    
     for delivery in third_party_deliveries:
-        order.selected_delivery = delivery
-        compatible_payments = order.get_available_payment_options()
-        chosen_payment = None
-
-        # Case 1: We have third-party payments to cover
-        if third_party_payments:
-            compatible_third_party = [
-                p for p in compatible_payments 
-                if p['en_name'] in uncovered_payments
-            ]
-
-            if compatible_third_party:
-                chosen_payment = random.choice(compatible_third_party)
-                uncovered_payments.discard(chosen_payment['en_name'])
-            else:
-                # All payments covered, fallback to any compatible third-party
-                compatible_third_party = [
-                    p for p in compatible_payments 
-                    if p in third_party_payments
-                ]
-                if compatible_third_party:
-                    chosen_payment = random.choice(compatible_third_party)
-    
-        # Case 2: Only third-party deliveries exist, no third-party payments
-        elif third_party_deliveries:
+        if delivery['en_name'] not in used_deliveries:
+            compatible_payments = delivery.get('compatible_with', {}).get('payment', [])
             if compatible_payments:
-                chosen_payment = random.choice(compatible_payments)
-        
-        if chosen_payment:
-            price_class = determine_price_class(chosen_payment)
-            plan.append({
-                'delivery': delivery,
-                'payment': chosen_payment,
-                'price_class': price_class
-            })
-    
-    # Pass 2: handle any remaining uncovered payments
-    # (when there are more payments than deliveries can cover in one pass)
-    if uncovered_payments:
-        print(f"Payments still uncovered: {uncovered_payments}")
-        
-        for payment_name in uncovered_payments:
-            # Find the payment object
-            payment = next(p for p in third_party_payments if p['en_name'] == payment_name)
-            
-            # Find a compatible third-party delivery
-            compatible_deliveries = [
-                d for d in third_party_deliveries
-                if d['local_name'] in payment.get('compatible_with', {}).get('delivery', [])
-            ]
-            
-            if compatible_deliveries:
-                delivery = random.choice(compatible_deliveries)
-                price_class = determine_price_class(payment)
+                payment = random.choice(compatible_payments)
+                region = random.choice(delivery.get('compatible_with', {}).get('region', []))
                 plan.append({
+                    'region': region,
                     'delivery': delivery,
-                    'payment': payment,
-                    'price_class': price_class
+                    'payment': payment
                 })
+                used_deliveries.add(delivery['en_name'])
             else:
-                print(f"✗ Warning: No compatible delivery for {payment_name}")
+                print(f"✗ Warning: No compatible payments for {delivery['en_name']}")
     
-    print(f'Generated test plan with {len(plan)} combo(s)')
+    print(f'\nGenerated test plan with {len(plan)} combo(s)')
     return plan
-
+    
 def execute_single_order(order):
     global driver, wait
     user_email = order.user_email
@@ -1191,7 +1153,7 @@ def execute_single_order(order):
                                 
                             if proceed_to_checkout():
                                 step_counter.print_step("Filling order form")                                
-                                fill_form_success = fill_order_form(user_email, test_phone)
+                                fill_form_success = fill_order_form(user_email, test_phone, order)
                                 
                                 if fill_form_success:
                                     step_counter.print_step("Clicking delivery option")
@@ -1284,9 +1246,9 @@ def run_test_plan(order, emails, order_counter):
 
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
-        order.sku['price_class'] = combo['price_class']
 
-        print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']} + Price class {order.sku['price_class']}')
+
+        print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']}')
         execute_single_order(order)
         c += 1
         local_counter += 1

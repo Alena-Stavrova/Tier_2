@@ -29,7 +29,7 @@ script_modules = {
 }
 
 script_modules = {
-    'ermenrich': {
+    'ru_websites': {
         'RU_ERM': ru_erm
     }
 }
@@ -37,7 +37,7 @@ script_modules = {
 
 # Max orders per brand (with buffer for IT's variability)
 num_orders_per_brand = {
-    'ermenrich': 3    # RU - 3 
+    'ru_websites': 3    # RU - 3 
 }
 
 # Collect all emails upfront (2 per brand since max is 8, and 8/5 > 1)
