@@ -64,13 +64,14 @@ class ParentContext:
 
         self.sku = {
             'selected': None,
-            'region': None,
             'price_class': None, # Just 1 price class here (price class 0)
             'price_class_type': 'flexible',  
             'unavailable': []   # Track unavailable SKUs
         }
 
         self.selected_delivery = None 
+
+        self.selected_region = None
 
         self.selected_payment = None
 
@@ -156,7 +157,7 @@ class OrderContextHU(ParentContext):
         self.sku_lists = {
             'price_classes': {
                 0: [83843, 84582, 84644, 84087, 82981,
-                    83822,  82976, 83837, 84560, 85961]
+                    83822,  82976, 83837, 84560, 84641]
             }
         }
      
@@ -364,10 +365,10 @@ def choose_address(order):
         '364024 Грозный Лорсанова 28'# Google/Dadata zips don't match, used Dadata
     ] 
     }
-    chosen_region = order.sku.get('region')
+    chosen_region = order.selected_region
     region_lib = shipping_addresses[chosen_region]
 
-    address = region_lib[random.choice()] 
+    address = random.choice(region_lib)
     return(address) #returns a string
 
 def extract_price(price_text):
@@ -770,10 +771,8 @@ def click_payment_option(order):
                                                                                                     
 def fill_order_form(user_email, test_phone, order):
     try:
-        ship_to = choose_address(order) #is a dictionary
-        country_name = ship_to['country']
-        city_name = ship_to['city']
-        print(f"Chosen address in: {country_name}, {city_name}")
+        ship_to = choose_address(order) #is a string
+        print(f"Chosen address: {ship_to}")
         
         # Wait for the form to be present
         WebDriverWait(driver, 5).until(
@@ -786,25 +785,46 @@ def fill_order_form(user_email, test_phone, order):
         
         # Email field
         try:
-            email_field = WebDriverWait(driver, 5).until(
-                EC.visibility_of_element_located((By.ID, "bx-input-order-EMAIL"))
+            email_field = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.ID, "bx-input-order-EMAIL"))
             )
-            email_field.clear()
+            # Click to focus first
+            email_field.click()
+            time.sleep(0.3)
+    
+            # Select all existing text and delete with keyboard
+            email_field.send_keys(Keys.CONTROL + "a")
+            email_field.send_keys(Keys.DELETE)
+            time.sleep(0.2)
+    
+            # Type the email
             email_field.send_keys(user_email)
             print("Email field filled")
+        
         except Exception as e:
             print(f"✗ Error with email field: {str(e)}")
+            traceback.print_exc()
             take_screenshot("email_field_error")
             return False
         
         # Phone field
         try:
             phone_field = WebDriverWait(driver, 5).until(
-                EC.visibility_of_element_located((By.ID, "bx-input-order-PHONE"))
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "input[data-input='send']"))
             )
+            phone_field.click()
             phone_field.clear()
             phone_field.send_keys(test_phone)
-            print("Phone field filled")
+            print("Phone number entered")
+    
+            # Click "Отправить смс" button
+            sms_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-sms-submit='send']"))
+            )
+            sms_button.click()
+            time.sleep(0.5)
+            print("SMS button clicked, phone field filled")
+    
         except Exception as e:
             print(f"✗ Error with phone field: {str(e)}")
             take_screenshot("phone_field_error")
@@ -836,110 +856,80 @@ def fill_order_form(user_email, test_phone, order):
         # Shipping address
         print("Filling shipping address...")
         
-        # Country field (a dropdown with typeahead)
+        # Debug: check what's actually on the page
+        print("Debug: Checking page state before address...")
+
+        # Check if address section exists at all
         try:
-            country_field = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.ID, "bx-input-order-COUNTRY_SHIPPING-ts-control"))
-            )
-            country_field.click()
-            time.sleep(0.5)
-            country_field.clear()
-            country_field.send_keys(country_name)
-            time.sleep(1)
-            country_field.send_keys(Keys.ENTER)
-            time.sleep(1)
-            print("Country selected")
-            
-        except Exception as e:
-            print(f"✗ Error with country field: {str(e)}")
-            take_screenshot("country_field_error")
-            return False
+            address_section = driver.find_element(By.ID, "bx-input-order-FULL_ADDRESS_SEARCH_SHIP")
+            print(f"Found hidden select: {address_section.get_attribute('class')}")
+        except:
+            print("Hidden select NOT found")
+
+        # Check for TomSelect wrapper
+        ts_wrappers = driver.find_elements(By.CSS_SELECTOR, ".ts-wrapper")
+        print(f"Number of .ts-wrapper elements: {len(ts_wrappers)}")
+
+        # Check for ANY TomSelect elements
+        ts_controls = driver.find_elements(By.CSS_SELECTOR, ".ts-control")
+        print(f"Number of .ts-control elements: {len(ts_controls)}")
+
+        # Check if there are any input fields at all in the address area
+        all_inputs = driver.find_elements(By.CSS_SELECTOR, "input, select, textarea")
+        print(f"Total input elements on page: {len(all_inputs)}")
+        for inp in all_inputs[:10]:  # Print first 10
+            inp_id = inp.get_attribute("id")
+            inp_class = inp.get_attribute("class")
+            if inp_id and "address" in inp_id.lower():
+                print(f"  Address-related input: id={inp_id}, class={inp_class}")
+
+        # Take a screenshot so we can see what's visible
+        take_screenshot("debug_before_address")
         
-        # City field 
+        # Address field with Dadata/TomSelect
         try:
-            # Wait for the whole order form container to be fully rendered
+            # First, make sure the TomSelect wrapper is fully loaded
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "CART-SIDEBAR-TARGET"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".ts-wrapper.input-hidden"))
             )
-            time.sleep(1)  # Small buffer for JS layout calculations
-    
-            # Now wait for city field specifically, with retry
-            city_field = None
-            for attempt in range(3):
-                try:
-                    city_field = WebDriverWait(driver, 10).until(
-                        EC.element_to_be_clickable((By.ID, "bx-input-order-CITY_SHIP"))
-                    )
-            
-                    # Scroll into view
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView({block: 'center'});", 
-                        city_field
-                    )
-                    time.sleep(0.3)
-            
-                    city_field.click()
-                    break  # Success!
-            
-                except Exception as click_error:
-                    print(f"Attempt {attempt + 1}/3 failed: {str(click_error)[:100]}")
-                    time.sleep(2)
-    
-            if city_field is None:
-                raise Exception("Failed to click city field after 3 attempts")
-    
-            city_field.clear()
-            city_field.send_keys(city_name)
-            print("City field filled")
-    
-            city_field.send_keys(Keys.TAB)
             time.sleep(0.5)
     
-        except Exception as e:
-            print(f"✗ Error with city field: {str(e)}")
-            take_screenshot("city_field_error")
-            return False
-        
-        # Address field
-        try:
-            address_field = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.ID, "bx-input-order-ADDRESS_SHIP"))
+            # Find the visible input inside TomSelect (it's the one with role="combobox")
+            address_field = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, ".ts-wrapper input[role='combobox']"))
             )
-            
-            # Click to ensure focus
+    
+            # Click to focus
             address_field.click()
-            time.sleep(0.5)
-            
-            address_field.clear()
-            address_field.send_keys(ship_to['address'])
-            print("Address field filled")
-            
-            # Press Tab to move to next field
-            address_field.send_keys(Keys.TAB)
-            time.sleep(0.5)
-            
+            time.sleep(0.3)
+    
+            # Clear existing content - the field has a pre-filled value
+            address_field.send_keys(Keys.CONTROL + "a")
+            time.sleep(0.1)
+            address_field.send_keys(Keys.BACKSPACE)  # Use backspace instead of delete
+            time.sleep(0.5)  # Wait for the field to actually clear
+    
+            # Verify it's empty (optional debug)
+            current_value = address_field.get_attribute("value")
+            print(f"Field value after clear: '{current_value}'")
+    
+            # Type the address character by character
+            for char in ship_to:
+                address_field.send_keys(char)
+                time.sleep(0.03)
+    
+            print("Address typed, waiting for Dadata suggestions...")
+            time.sleep(2)
+    
+            # Press Enter to select first suggestion
+            address_field.send_keys(Keys.ENTER)
+            time.sleep(1)
+            print("Address selected")
+    
         except Exception as e:
             print(f"✗ Error with address field: {str(e)}")
+            traceback.print_exc()
             take_screenshot("address_field_error")
-            return False
-        
-        # Postal code field
-        try:
-            postal_code_field = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.ID, "bx-input-order-ZIP_SHIP"))
-            )
-            
-            # Click to ensure focus
-            postal_code_field.click()
-            time.sleep(0.5)
-            
-            postal_code_field.clear()
-            postal_code_field.send_keys(ship_to['postal_code'])
-            print("Postal code field filled")
-            
-        except Exception as e:
-            print(f"✗ Error with postal code field: {str(e)}")
-            take_screenshot("postal_code_field_error")
             return False
         
         # Billing address is the same as shipping (default tick remains)
@@ -1064,7 +1054,12 @@ def generate_test_plan(order):
         if delivery['en_name'] not in used_deliveries:
             compatible_payments = delivery.get('compatible_with', {}).get('payment', [])
             if compatible_payments:
-                payment = random.choice(compatible_payments)
+                payment_name = random.choice(compatible_payments) # Returns a string
+                # Find the full payment dictionary
+                payment = next(
+                    p for p in order.payment_options 
+                    if p['en_name'] == payment_name
+                )
                 region = random.choice(delivery.get('compatible_with', {}).get('region', []))
                 plan.append({
                     'region': region,
@@ -1246,6 +1241,7 @@ def run_test_plan(order, emails, order_counter):
 
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
+        order.selected_region = combo['region']
 
 
         print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']}')
