@@ -721,18 +721,16 @@ def click_delivery_option(order):
 def click_payment_option(order):
     try:
         selected = order.selected_payment
-
         selected_name = selected['local_name']
         selected_id = selected['opt_id']
 
-        # Get default payment from order context
+        # Only interact if not default
         default = order.get_default_payment()
         default_name = default['local_name'] if default else None
         
-        # Only interact with UI if not default
         if selected_name != default_name:
             try:
-                # Find and click the payment option label
+                # Find the payment option label
                 payment_label = wait.until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, 
                         f"label[for='{selected_id}']"))
@@ -745,6 +743,12 @@ def click_payment_option(order):
                     payment_label
                 )
                 time.sleep(0.5)
+
+                # Re-find after scroll to avoid stale element
+                payment_label = wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, 
+                        f"label[for='{selected_id}']"))
+                )
                 payment_label.click()
                 time.sleep(1)
                 
