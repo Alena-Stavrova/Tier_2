@@ -629,23 +629,26 @@ def proceed_to_checkout():
         return False
 
 def _select_pickup_location(order):
-    # Handle ALL pickup types: Moscow shop, St. Pete shop, SDEK pickup points.
-    # Picks a random location, avoiding pre-pay-only shops (text-danger warning).
     try:
         # Wait for the pickup list to appear
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "delivery-map__list"))
         )
+        
+        # Wait for buttons to have text (list fully loaded)
+        WebDriverWait(driver, 10).until(
+            lambda d: any(
+                btn.text.strip() == "Заберу здесь" 
+                for btn in d.find_elements(By.CSS_SELECTOR, ".delivery-map__item button")
+            )
+        )
         time.sleep(0.5)
         
-        # Get all pickup items
+        # Now get all pickup items (fresh after wait)
         all_items = driver.find_elements(By.CLASS_NAME, "delivery-map__item")
+        print(f"Total items found: {len(all_items)}")
         
-        if not all_items:
-            print("✗ No pickup locations found")
-            return False
-        
-        # Filter out pre-pay-only locations (they have text-danger warning)
+        # Filter out pre-pay-only locations
         usable_items = []
         for item in all_items:
             danger_warnings = item.find_elements(By.CLASS_NAME, "text-danger")
@@ -657,25 +660,41 @@ def _select_pickup_location(order):
             take_screenshot("all_prepay_only")
             return False
         
-        print(f"Found {len(usable_items)} usable locations (filtered out {len(all_items) - len(usable_items)} pre-pay only)")
+        print(f"Found {len(usable_items)} usable locations")
         
-        # Pick a random location
-        chosen = random.choice(usable_items)
+        # Pick random and find its button by index
+        chosen_index = all_items.index(random.choice(usable_items))
+        print(f"Chosen item index: {chosen_index}")
         
-        # Get the location name for logging
-        title_elem = chosen.find_element(By.CLASS_NAME, "delivery-map__title")
-        location_name = title_elem.text.split("\n")[0][:80]  # First line, truncated
-        print(f"Selected: {location_name}")
+        # Get title for logging
+        try:
+            title_elem = all_items[chosen_index].find_element(By.CLASS_NAME, "delivery-map__title")
+            location_name = title_elem.text.split("\n")[0][:80]
+            print(f"Selected: {location_name}")
+        except:
+            print("Could not extract title")
         
-        # Find and click the "Заберу здесь" button
-        pickup_button = chosen.find_element(By.CSS_SELECTOR, "button[data-set-shop]")
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", pickup_button)
-        time.sleep(0.3)
-        pickup_button.click()
-        time.sleep(1)
-        
-        print(f"✓ Pickup location confirmed")
-        return True
+        # Find the button by index (avoids stale elements from earlier queries)
+        buttons = driver.find_elements(By.CSS_SELECTOR, ".delivery-map__item button")
+        if chosen_index < len(buttons):
+            pickup_button = buttons[chosen_index]
+            print(f"Button text: '{pickup_button.text}'")
+            
+            # Scroll and click
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", 
+                pickup_button
+            )
+            time.sleep(0.3)
+            
+            # Click via JS directly
+            driver.execute_script("arguments[0].click();", pickup_button)
+            time.sleep(1)
+            print("✓ Pickup location click attempted")
+            return True
+        else:
+            print(f"✗ Button index {chosen_index} out of range ({len(buttons)} buttons)")
+            return False
         
     except Exception as e:
         print(f"✗ Failed to select pickup location: {str(e)}")
@@ -685,6 +704,16 @@ def _select_pickup_location(order):
     
 def click_delivery_option(order):
     try:
+        # Wait for the loader overlay to disappear
+        try:
+            WebDriverWait(driver, 15).until(
+                EC.invisibility_of_element_located((By.CSS_SELECTOR, "#CART-SIDEBAR-TARGET.loader"))
+            )
+            print("Loader disappeared")
+            time.sleep(0.5)
+        except:
+            print("Loader not found or already gone")
+    
         delivery = order.selected_delivery
         delivery_name = delivery['local_name']
         delivery_en = delivery['en_name']
@@ -1228,9 +1257,11 @@ def execute_single_order(order):
         print(f"Payment option: {order.summary['payment_option']}")
 
 
-        # Shipping fees match check
         if fee_success:
-            print(f"Order fee (shipping + payment): ✓ As expected, {order.summary['order_fee']} Ft")
+            if order.selected_delivery.get('is_third_party') or order.selected_payment.get('is_third_party'):
+                print(f"Order fee (shipping + payment): {order.summary['order_fee']} (third-party, no reference to verify against)")
+            else:
+                print(f"Order fee (shipping + payment): ✓ As expected, {order.summary['order_fee']}")
         else:
             print(f"✗ Shipping fees don't match: expected {order.summary['expected_fee']}, got {order.summary['order_fee']}")
         
