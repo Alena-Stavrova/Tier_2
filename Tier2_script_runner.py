@@ -1,5 +1,5 @@
 # Russian websites
-#import RU ERM
+import RU_ERM_tier2 as ru_erm
 #import RU LVH
 # EU Levenhuks
 import BG_LVH_tier2 as bg_lvh
@@ -14,6 +14,9 @@ import PL_ERM_tier2 as pl_erm
 import random
 
 script_modules = {
+    'ru': {
+        'RU_ERM': ru_erm,
+    },
     'levenhuk': {
         'BG_LVH': bg_lvh,
         'EU_LVH': eu_lvh,
@@ -32,6 +35,7 @@ script_modules = {
 
 # Max orders per brand (with buffer for IT's variability)
 num_orders_per_brand = {
+    'ru': 3,          # RU ERM-3
     'levenhuk': 6,    # BG-1, EU-2, HU-1, PL-2
     'ermenrich': 8    # CZ-2, HU-1, IT-3(max), PL-2
 }
