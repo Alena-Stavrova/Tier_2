@@ -382,7 +382,7 @@ def extract_price(price_text):
   
 def close_cookie_popup():
     try:
-        accept_button = WebDriverWait(driver, 5).until(
+        accept_button = WebDriverWait(driver, 3).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, 
                 "#cookie_notice_alert a.btn.btn-primary"))
         )
@@ -392,8 +392,7 @@ def close_cookie_popup():
         return True    
      
     except Exception as e:
-        print(f"✗ Error handling cookie popup: {str(e)}")
-        return False
+        return False  # Popup already closed or not present 
 
 def search_for_sku(sku):
     # Find item by SKU search 
@@ -861,70 +860,76 @@ def fill_order_form(user_email, test_phone, order):
 
         # Check if address section exists at all
         try:
-            address_section = driver.find_element(By.ID, "bx-input-order-FULL_ADDRESS_SEARCH_SHIP")
-            print(f"Found hidden select: {address_section.get_attribute('class')}")
-        except:
-            print("Hidden select NOT found")
-
-        # Check for TomSelect wrapper
-        ts_wrappers = driver.find_elements(By.CSS_SELECTOR, ".ts-wrapper")
-        print(f"Number of .ts-wrapper elements: {len(ts_wrappers)}")
-
-        # Check for ANY TomSelect elements
-        ts_controls = driver.find_elements(By.CSS_SELECTOR, ".ts-control")
-        print(f"Number of .ts-control elements: {len(ts_controls)}")
-
-        # Check if there are any input fields at all in the address area
-        all_inputs = driver.find_elements(By.CSS_SELECTOR, "input, select, textarea")
-        print(f"Total input elements on page: {len(all_inputs)}")
-        for inp in all_inputs[:10]:  # Print first 10
-            inp_id = inp.get_attribute("id")
-            inp_class = inp.get_attribute("class")
-            if inp_id and "address" in inp_id.lower():
-                print(f"  Address-related input: id={inp_id}, class={inp_class}")
-
-        # Take a screenshot so we can see what's visible
-        take_screenshot("debug_before_address")
-        
-        # Address field with Dadata/TomSelect
-        try:
-            # First, make sure the TomSelect wrapper is fully loaded
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".ts-wrapper.input-hidden"))
-            )
+            address_section = driver.find_element(By.CSS_SELECTOR, ".ts-wrapper")
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", address_section)
             time.sleep(0.5)
+
+            # Click the .ts-control to activate TomSelect
+            ts_control = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, ".ts-control"))
+            )
+            ts_control.click()
+            time.sleep(0.3)
+
+            # Now find the actual input that appeared/was activated inside
+            address_input = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, ".ts-control input"))
+            )
+
+            # Clear via JavaScript first (bypasses interactability issues)
+            driver.execute_script("arguments[0].value = '';", address_input)
+            driver.execute_script("arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", address_input)
+            time.sleep(0.3)
+
+            # Type the address via JavaScript value + trigger input event
+            driver.execute_script("arguments[0].value = arguments[1];", address_input, ship_to)
+            driver.execute_script("arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", address_input)
+            driver.execute_script("arguments[0].dispatchEvent(new Event('keyup', {bubbles: true}));", address_input)
+
+            print("Address set via JS, waiting for Dadata suggestions...")
+            time.sleep(2)
+
+            # Get the expected zip code (first 6 chars of our address)
+            expected_zip = ship_to[:6].strip()
+            print(f"Expected zip: '{expected_zip}'")
     
-            # Find the visible input inside TomSelect (it's the one with role="combobox")
-            address_field = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, ".ts-wrapper input[role='combobox']"))
+            # Wait for Dadata dropdown to appear and get all suggestions
+            suggestions = WebDriverWait(driver, 5).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ts-dropdown .option, .ts-dropdown .ts-dropdown-content .option"))
             )
     
-            # Click to focus
-            address_field.click()
-            time.sleep(0.3)
+            # Try to extend wait if dropdown is still loading
+            if not suggestions:
+                time.sleep(1)
+                suggestions = driver.find_elements(By.CSS_SELECTOR, ".ts-dropdown .option, .ts-dropdown .ts-dropdown-content .option")
     
-            # Clear existing content - the field has a pre-filled value
-            address_field.send_keys(Keys.CONTROL + "a")
-            time.sleep(0.1)
-            address_field.send_keys(Keys.BACKSPACE)  # Use backspace instead of delete
-            time.sleep(0.5)  # Wait for the field to actually clear
+            print(f"Found {len(suggestions)} Dadata suggestions")
     
-            # Verify it's empty (optional debug)
-            current_value = address_field.get_attribute("value")
-            print(f"Field value after clear: '{current_value}'")
+            # Find the best matching suggestion
+            chosen = None
+            for i, suggestion in enumerate(suggestions):
+                text = suggestion.text.strip()
+                print(f"  Option {i+1}: {text[:80]}...")
+        
+                # Check if zip code matches
+                if expected_zip and text[:6] == expected_zip:
+                    chosen = suggestion
+                    print(f"  → Zip match! Selecting this one.")
+                    break
     
-            # Type the address character by character
-            for char in ship_to:
-                address_field.send_keys(char)
-                time.sleep(0.03)
+            # Fallback: if no zip match, pick the first one (better than nothing)
+            if not chosen and suggestions:
+                chosen = suggestions[0]
+                print(f"  → No zip match found, selecting first option as fallback")
     
-            print("Address typed, waiting for Dadata suggestions...")
-            time.sleep(2)
-    
-            # Press Enter to select first suggestion
-            address_field.send_keys(Keys.ENTER)
-            time.sleep(1)
-            print("Address selected")
+            if chosen:
+                chosen.click()
+                time.sleep(1)
+                print("Address selected")
+            else:
+                print("✗ No suggestions found at all")
+                take_screenshot("no_address_suggestions")
+                return False
     
         except Exception as e:
             print(f"✗ Error with address field: {str(e)}")
