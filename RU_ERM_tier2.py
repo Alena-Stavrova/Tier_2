@@ -860,77 +860,79 @@ def fill_order_form(user_email, test_phone, order):
 
         # Check if address section exists at all
         try:
+            # Scroll to the address section
             address_section = driver.find_element(By.CSS_SELECTOR, ".ts-wrapper")
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", address_section)
             time.sleep(0.5)
-
+    
             # Click the .ts-control to activate TomSelect
             ts_control = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, ".ts-control"))
             )
             ts_control.click()
             time.sleep(0.3)
-
-            # Now find the actual input that appeared/was activated inside
-            address_input = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, ".ts-control input"))
-            )
-
-            # Clear via JavaScript first (bypasses interactability issues)
-            driver.execute_script("arguments[0].value = '';", address_input)
-            driver.execute_script("arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", address_input)
+    
+            # Clear first via JavaScript (works on the div)
+            driver.execute_script("""
+                var input = document.querySelector('.ts-control input');
+                if (input) {
+                    input.value = '';
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                }
+            """)
             time.sleep(0.3)
-
-            # Type the address via JavaScript value + trigger input event
-            driver.execute_script("arguments[0].value = arguments[1];", address_input, ship_to)
-            driver.execute_script("arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", address_input)
-            driver.execute_script("arguments[0].dispatchEvent(new Event('keyup', {bubbles: true}));", address_input)
-
-            print("Address set via JS, waiting for Dadata suggestions...")
+    
+            # Now use Selenium to type character by character into the input
+            # Find the input AFTER it's been activated by click
+            address_input = driver.find_element(By.CSS_SELECTOR, ".ts-control input")
+    
+            # Type the full address string - send_keys on the input should work now
+            # since we clicked .ts-control first to activate it
+            address_input.send_keys(ship_to)
+    
+            print(f"Address typed: {ship_to}")
+            print("Waiting for Dadata suggestions...")
             time.sleep(2)
-
-            # Get the expected zip code (first 6 chars of our address)
+    
+            # Get the expected zip code
             expected_zip = ship_to[:6].strip()
             print(f"Expected zip: '{expected_zip}'")
     
-            # Wait for Dadata dropdown to appear and get all suggestions
+            # Wait for suggestions dropdown
             suggestions = WebDriverWait(driver, 5).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ts-dropdown .option, .ts-dropdown .ts-dropdown-content .option"))
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ts-dropdown .option, .option[data-selectable]"))
             )
     
-            # Try to extend wait if dropdown is still loading
             if not suggestions:
                 time.sleep(1)
-                suggestions = driver.find_elements(By.CSS_SELECTOR, ".ts-dropdown .option, .ts-dropdown .ts-dropdown-content .option")
+                suggestions = driver.find_elements(By.CSS_SELECTOR, ".ts-dropdown .option, .option[data-selectable]")
     
             print(f"Found {len(suggestions)} Dadata suggestions")
     
-            # Find the best matching suggestion
+            # Find best match by zip code
             chosen = None
             for i, suggestion in enumerate(suggestions):
                 text = suggestion.text.strip()
-                print(f"  Option {i+1}: {text[:80]}...")
+                print(f"  Option {i+1}: {text[:100]}")
         
-                # Check if zip code matches
                 if expected_zip and text[:6] == expected_zip:
                     chosen = suggestion
-                    print(f"  → Zip match! Selecting this one.")
+                    print(f"  → Zip match!")
                     break
     
-            # Fallback: if no zip match, pick the first one (better than nothing)
             if not chosen and suggestions:
                 chosen = suggestions[0]
-                print(f"  → No zip match found, selecting first option as fallback")
+                print(f"  → No zip match, using first option")
     
             if chosen:
                 chosen.click()
                 time.sleep(1)
                 print("Address selected")
             else:
-                print("✗ No suggestions found at all")
+                print("✗ No suggestions found")
                 take_screenshot("no_address_suggestions")
                 return False
-    
+        
         except Exception as e:
             print(f"✗ Error with address field: {str(e)}")
             traceback.print_exc()
