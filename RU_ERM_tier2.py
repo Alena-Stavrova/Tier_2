@@ -61,6 +61,7 @@ class ParentContext:
     def __init__(self):
         self.user_email = None
         self.user_phone = None
+        self.currency = None
 
         self.sku = {
             'selected': None,
@@ -150,9 +151,10 @@ class ParentContext:
         self.summary.update(kwargs)
 
 # Container for all order-related data
-class OrderContextHU(ParentContext):
+class OrderContextRU(ParentContext):
     def __init__(self):
         super().__init__()
+        self.currency = '₽'
     
         self.sku_lists = {
             'price_classes': {
@@ -302,25 +304,18 @@ class OrderContextHU(ParentContext):
         }
     
     
-    def get_expected_shipping_fee(self):
-        if not self.selected_delivery:
-            return None, None
-        elif self.selected_delivery.get('is_third_party'):
-            # Guard against calling before we're on the order page
-            if driver is None:
-                return None, None
-            # Third party deliveries, will always have numbers
-            try:
-                fee_element = driver.find_element(By.ID, 'bx-cost-shipping').text
-                fee_amount = extract_price(fee_element)
-                return fee_element, fee_amount
-            except:
-                return None, None
-        # Our deliveries, may have numbers or "Бесплатная доставка"
-        else:
-            delivery_name = self.selected_delivery['en_name']
-            fee_data = self.fees['shipping'].get(delivery_name)
-            return fee_data['display'], fee_data['amount'] if fee_data else (None, None)
+def get_expected_shipping_fee(self):
+    if not self.selected_delivery:
+        return None, None
+    
+    # Third-party deliveries - no reference price, skip
+    if self.selected_delivery.get('is_third_party'):
+        return None, None
+    
+    # Our own deliveries with predetermined costs
+    delivery_name = self.selected_delivery['en_name']
+    fee_data = self.fees['shipping'].get(delivery_name)
+    return fee_data['display'], fee_data['amount'] if fee_data else (None, None)
 
 
 # Choose random sku, return a string and int price class
@@ -952,10 +947,23 @@ def fill_order_form(user_email, test_phone, order):
 
 def verify_order_fee(order):
     try:
+        # Skip verification for third-party deliveries (no reference price)
+        if order.selected_delivery.get('is_third_party'):
+            print("Third-party delivery - skipping fee verification (no reference price)")
+            # Still capture the actual fee for the order summary
+            try:
+                fee_element = wait.until(
+                    EC.presence_of_element_located((By.ID, "bx-cost-shipping"))
+                )
+                order.summary['order_fee'] = fee_element.text
+            except:
+                order.summary['order_fee'] = "unknown"
+            return True, order.summary.get('order_fee')
+        
+        # For our own deliveries, verify against expected fees
         print("Verifying order fees...")
         time.sleep(2)
 
-        # Get actual fee from page
         fee_element = wait.until(
             EC.presence_of_element_located((By.ID, "bx-cost-shipping"))
         )    
@@ -971,10 +979,10 @@ def verify_order_fee(order):
             actual_fee = extract_price(actual_fee_text)
         
         if actual_fee == expected_amount:
-            print(f"✓ Fee verified: {actual_fee} ₽")
+            print(f"✓ Fee verified: {actual_fee} {order.currency}")
             return True, actual_fee
         else:
-            print(f"✗ Fee mismatch: Expected '{expected_display}', got '{actual_fee}'")
+            print(f"✗ Fee mismatch: Expected '{expected_display}, got '{actual_fee}'")
             return False, actual_fee
                 
     except Exception as e:
@@ -1008,16 +1016,16 @@ def place_order():
     
 def get_order_number():
     # Get the order number from the URL of the confirmation page
-    # URL is like: https://ermenrich.ru/order/?ORDER_ID=ERM-456258
+    # URL is like: https://ermenrich.ru/order/?ORDER_ID=T-ERM-456320
     try:
         current_url = driver.current_url
         if "ORDER_ID=" in current_url:
             # Slicing different number of characters for test ("T-") and regular orders
             # Will need to edit if > 99,999 orders
             if "T-" in current_url:
-                order_num = current_url[-13:]
+                order_num = current_url[-12:]
             else:
-                order_num = current_url[-11:]
+                order_num = current_url[-10:]
             print(f"✓ Order confirmed! Order number: {order_num}")
             return order_num
                 
@@ -1046,9 +1054,11 @@ def generate_test_plan(order):
     used_deliveries = set()  # Track deliveries already tested in any region
 
     delivery = random.choice(third_party_deliveries)
+    # Expect only one 3rd-party payment (банковская карта онлайн)
     if len(third_party_payments) > 1:
-        print("Uh oh, more than 1 third party deliveries, need to update test plan generation")
+        print("Uh oh, more than 1 third-party payments, need to update test plan generation")
     else:
+        # If only 1 3rd-party payment found (as expected), pair it with any 3rd-party delivery
         region = random.choice(delivery.get('compatible_with', {}).get('region', []))
         plan.append({
             'region': region,
@@ -1057,6 +1067,7 @@ def generate_test_plan(order):
         })
         used_deliveries.add(delivery['en_name'])
     
+    # Pair remaining 3rd-party deliveries with any compatible payments
     for delivery in third_party_deliveries:
         if delivery['en_name'] not in used_deliveries:
             compatible_payments = delivery.get('compatible_with', {}).get('payment', [])
@@ -1148,7 +1159,7 @@ def execute_single_order(order):
                         basket_price = get_total_price_basket(order)
 
                         if basket_price is not None:
-                            print(f"Cart total price: {basket_price}")
+                            print(f"Cart total price: {basket_price} {order.currency}")
                                 
                             step_counter.print_step("Proceeding to checkout")
                             take_screenshot("basket_before_checkout")
@@ -1208,7 +1219,7 @@ def execute_single_order(order):
         else:
             print("Order number: order wasn't placed")
         print(f"Chosen SKU: {order.sku['selected']}")
-        print(f"Item price: {order.summary['basket_price']} Ft")
+        print(f"Item price: {order.summary['basket_price']} {order.currency}")
         print(f"Delivery option: {order.summary['delivery_option']}")
         print(f"Payment option: {order.summary['payment_option']}")
 
@@ -1266,7 +1277,7 @@ def main_ru_erm(email, phone, emails=None, order_counter=0):
     if emails is None:
         emails = [email]  # Backward compatibility
     
-    order = OrderContextHU()
+    order = OrderContextRU()
     order.user_email = email
     order.user_phone = phone
     
