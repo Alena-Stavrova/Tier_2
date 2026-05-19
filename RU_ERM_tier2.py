@@ -92,6 +92,7 @@ class ParentContext:
     def get_all_skus(self):
         # Get all SKUs from both price classes
         all_skus = self.sku_lists['price_classes'][0] 
+        return all_skus
     
     def mark_sku_unavailable(self, sku):
         # Add a SKU to the unavailable list
@@ -882,9 +883,6 @@ def fill_order_form(user_email, test_phone, order):
         
         # Shipping address
         print("Filling shipping address...")
-        
-        # Debug: check what's actually on the page
-        print("Debug: Checking page state before address...")
 
         # Check if address section exists at all
         try:
