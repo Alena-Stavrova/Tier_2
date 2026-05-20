@@ -305,18 +305,18 @@ class OrderContextRU(ParentContext):
         }
     
     
-def get_expected_shipping_fee(self):
-    if not self.selected_delivery:
-        return None, None
+    def get_expected_shipping_fee(self):
+        if not self.selected_delivery:
+            return None, None
     
-    # Third-party deliveries - no reference price, skip
-    if self.selected_delivery.get('is_third_party'):
-        return None, None
+        # Third-party deliveries - no reference price, skip
+        if self.selected_delivery.get('is_third_party'):
+            return None, None
     
-    # Our own deliveries with predetermined costs
-    delivery_name = self.selected_delivery['en_name']
-    fee_data = self.fees['shipping'].get(delivery_name)
-    return fee_data['display'], fee_data['amount'] if fee_data else (None, None)
+        # Our own deliveries with predetermined costs
+        delivery_name = self.selected_delivery['en_name']
+        fee_data = self.fees['shipping'].get(delivery_name)
+        return fee_data['display'], fee_data['amount'] if fee_data else (None, None)
 
 
 # Choose random sku, return a string and int price class
@@ -769,10 +769,10 @@ def click_payment_option(order):
                 
                 # Scroll to the label
                 driver.execute_script(
-                    "arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", 
+                    "arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", 
                     payment_label
                 )
-                time.sleep(0.5)
+                time.sleep(0.3)
 
                 # Re-find after scroll to avoid stale element
                 payment_label = wait.until(
@@ -786,8 +786,19 @@ def click_payment_option(order):
                 return True
                 
             except Exception as e:
-                print(f"✗ Failed to click payment option {selected_name}: {str(e)}")
-                return False
+                # Fallback: JavaScript click
+                try:
+                    print("Attempting JavaScript click fallback...")
+                    driver.execute_script(
+                        f"document.querySelector('label[for=\"{selected_id}\"]').click();"
+                    )
+                    time.sleep(1)
+                    print(f"✓ Successfully selected {selected_name} via JavaScript")
+                    return True
+                except:
+                    print(f"✗ Failed to click payment option {selected_name}: {str(e)}")
+                    traceback.print_exc()
+                    return False
         else:
             print(f"Using default payment option ({default_name}), no action needed")
             return True
@@ -1251,6 +1262,7 @@ def execute_single_order(order):
             print("Order number: order wasn't placed")
         print(f"Chosen SKU: {order.sku['selected']}")
         print(f"Item price: {order.summary['basket_price']} {order.currency}")
+        print(f'Chosen region: {order.selected_region}')
         print(f"Delivery option: {order.summary['delivery_option']}")
         print(f"Payment option: {order.summary['payment_option']}")
 
