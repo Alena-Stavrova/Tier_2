@@ -15,7 +15,7 @@ import sys
 # Initialize driver with None (to be changed later)
 driver = None
 wait = None
-website_main = "https://ermenrich.ru/"
+website_main = "https://levenhuk.ru/"
 
 # Create the optimized driver (loads fast, limits images)
 def create_optimized_driver():
@@ -66,7 +66,7 @@ class ParentContext:
         self.sku = {
             'selected': None,
             'price_class': None, # Just 1 price class here (price class 0)
-            'price_class_type': 'flexible',  
+            'price_class_type': 'flexible', 
             'unavailable': []   # Track unavailable SKUs
         }
 
@@ -91,7 +91,7 @@ class ParentContext:
     
     def get_all_skus(self):
         # Get all SKUs from both price classes
-        all_skus = self.sku_lists['price_classes'][0] 
+        all_skus = self.sku_lists['price_classes'][0]
         return all_skus
     
     def mark_sku_unavailable(self, sku):
@@ -115,7 +115,7 @@ class ParentContext:
     def get_available_payment_options(self):
         if not self.selected_delivery:
             return self.payment_options.copy()
-    
+        
         delivery = self.selected_delivery
         compatible = delivery.get('compatible_with', {})
         allowed_payments = compatible.get('payment', [])
@@ -146,7 +146,7 @@ class ParentContext:
         for option in self.payment_options:
             if option.get('is_cash', False):
                 return option
-        return None            
+        return None
         
     def update_summary(self, **kwargs):
         self.summary.update(kwargs)
@@ -159,11 +159,13 @@ class OrderContextRU(ParentContext):
     
         self.sku_lists = {
             'price_classes': {
-                0: [83843, 84582, 84644, 84087, 82981,
-                    83822,  82976, 83837, 84560, 84641]
+                0: [77830, 86570, 76825, 69036, 79583, 
+                    78374, 72111, 81698, 80335, 85312]
             }
         }
-     
+
+        self.regions = ['Moscow', 'St. Petersburg', 'regions']
+
         self.delivery_options = [
             # Moscow default = Доставка курьером, no action
             # St. Pete default = Самовывоз из магазина + confirm shop
@@ -249,11 +251,12 @@ class OrderContextRU(ParentContext):
         ]
 
         self.payment_options = [
-            {
+            {   # 5% discount for regions
                 'local_name': 'оплата онлайн (банковская карта)',
                 'en_name': 'credit card',
-                'opt_id': 'ID_PAY_SYSTEM_ID_11',
+                'opt_id': 'ID_PAY_SYSTEM_ID_14',
                 'is_default': True,
+                'is_discount': True,
                 'is_third_party': True,
             },
             {
@@ -303,13 +306,12 @@ class OrderContextRU(ParentContext):
                     } 
             }
         }
-    
-    
+
     def get_expected_shipping_fee(self):
         if not self.selected_delivery:
             return None, None
     
-        # Third-party deliveries - no reference price, skip
+        # Third-party deliveries - no reference price, can't verify, skip
         if self.selected_delivery.get('is_third_party'):
             return None, None
     
@@ -317,7 +319,20 @@ class OrderContextRU(ParentContext):
         delivery_name = self.selected_delivery['en_name']
         fee_data = self.fees['shipping'].get(delivery_name)
         return fee_data['display'], fee_data['amount'] if fee_data else (None, None)
+    
+    def get_expected_discount(self):
+        if not self.selected_payment:
+            return None, None
+        
+        is_discount = self.selected_payment('is_discount', False)
+        region = self.selected_region
 
+        if is_discount and region == 'regions':
+            # 5% discount for regions when paid with credit card
+            discount = 0.05
+        else:
+            discount = 0
+        return discount
 
 # Choose random sku, return a string and int price class
 def choose_sku(order):
@@ -370,17 +385,17 @@ def choose_address(order):
 def extract_price(price_text):
     # Remove all characters except digits and the comma/dot
     # Only EU, US have dot (23.95 EU - no need to replace), the rest have comma
-    clean_text = re.sub(r'[^\d]', '', price_text)
+    clean_text = re.sub(r'[^\d]', '', price_text)  
     try:
-        return int(clean_text)
+        return float(clean_text)
     except ValueError:
         return None
   
-def close_cookie_popup():
+def close_cookie_popup(): 
     try:
         accept_button = WebDriverWait(driver, 3).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, 
-                "#cookie_notice_alert a.btn.btn-primary"))
+                "#cookie_notice_alert a.btn.btn-outline-dark.btn-sm.fs-12"))
         )
         accept_button.click()
         print("Cookie popup closed")
@@ -388,40 +403,39 @@ def close_cookie_popup():
         return True    
      
     except Exception as e:
-        return False  # Popup already closed or not present 
+        return False # Popup already closed or not present
 
 def search_for_sku(sku):
-    # Find item by SKU search 
     try:
         print("Navigating to main page...")
         driver.get(website_main)
         time.sleep(3)
-        
+
         close_cookie_popup()
         
         print("Opening search box...")
-        search_box = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".header__search")))
+        search_box = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "header__search")))
         search_box.click()
         time.sleep(1)
         
         print("Entering SKU...")
-        search_input = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input[data-iv-toggle='search']")))
+        search_input = wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "search__input")))
         search_input.clear()
         search_input.send_keys(str(sku))
-                
+       
         print("Submitting search...")
         search_input.send_keys(Keys.ENTER)
-        
         print("Waiting for results to load...")
+
         try:
             WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".product-card"))
+                EC.presence_of_element_located((By.CLASS_NAME, ".b-48.pb-md-24"))
             )
         except:
             time.sleep(5)
 
         # Find card SKU line, like "Product ID: 83836"
-        card_sku_elem = driver.find_element(By.CSS_SELECTOR, ".product-card__article.swiper-no-swiping")
+        card_sku_elem = driver.find_element(By.CLASS_NAME, 'catalog-card__article')
         card_sku = card_sku_elem.text[-5:]
         print(f"SKU on the product card is: {card_sku}")
         
@@ -447,13 +461,13 @@ def is_item_available(order):
     sku = order.sku['selected']
     try:
         search_for_sku(sku)
-        price_text = driver.find_element(By.CLASS_NAME, "product-card__price").text.lower()
+        price_text = driver.find_element(By.CLASS_NAME, "catalog-card__price").text.lower()
         # Check language file for the translations: out of stock, discontinued, coming soon
-        unavailable_indicators = ['нет в наличии', 'снят с производства', 'скоро в продаже']
+        unavailable_indicators = ['nincs raktáron', 'megszűnt', 'hamarosan érkezik']
         if any(indicator in price_text for indicator in unavailable_indicators):
             return False, price_text
         else:
-            cart_button = driver.find_element(By.CSS_SELECTOR, "button[data-control-cart]")
+            cart_button = driver.find_element(By.CLASS_NAME, "catalog-card__cart")
             if cart_button.is_displayed():
                 return True, "available"
             else:
@@ -463,24 +477,26 @@ def is_item_available(order):
         return False, str(e)
 
 def get_offer_id(sku):
+    # Offer ID is in data-id
     try:
         print(f"Finding offer ID for SKU: {sku}")
         
-        # Find the product card container
-        product_card = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".product-card.product-control.product-card_inited.product-control_inited")))
+        # Find the catalog-card container that contains SKU text and get its data-id
+        offer_id_xpath = f"//div[contains(@class, 'catalog-card') and .//div[contains(@class, 'catalog-card__article') and contains(text(), '{sku}')]]"
         
-        # Get the offer ID from the data attributes
-        offer_id = product_card.get_attribute('data-offer-id')
+        container = wait.until(EC.presence_of_element_located((By.XPATH, offer_id_xpath)))
+        
+        # Get the offer ID from data-id attribute
+        offer_id = container.get_attribute('data-id')
         
         if offer_id:
-            print(f"✓ Found offer ID {offer_id}")
-            return int(offer_id)      
-        
-    except Exception as e:
-        print(f"✗ Failed to get offer ID: {str(e)}")
-        take_screenshot("offer_id_error")
-        return None
-    
+            print(f"✓ Found offer ID: {offer_id}")
+            return int(offer_id)
+        else:
+            print("✗ Failed to get offer ID: {str(e)}")
+            take_screenshot("offer_id_error")
+            return None
+            
     except Exception as e:
         print(f"✗ Error finding offer ID: {str(e)}")
         return None
@@ -494,11 +510,11 @@ def add_to_cart_via_api(offer_id, quantity=1):
             fetch('/rest/methods/user/basket/change', {{
                 method: 'POST',
                 headers: {{'Content-Type': 'application/json'}},
-                body: JSON.stringify({{offerId: {offer_id}, quantity: {quantity}}})
+                body: JSON.stringify({{offerId: {offer_id}, quantity: "{quantity}"}})
             }})
             .then(response => response.json())
             .then(data => {{
-                console.log('API response:', data);
+                console.log('API Response:', data);
                 // Store success state for verification
                 window.lastCartAdd = {{
                     success: true,
@@ -513,8 +529,8 @@ def add_to_cart_via_api(offer_id, quantity=1):
         """
         
         driver.execute_script(script)
-        time.sleep(2) # Wait for API call
-
+        time.sleep(2)  # Wait for API call
+        
         # Verify it worked
         check_script = """
             return window.lastCartAdd || {success: false, error: 'No response'};
@@ -527,11 +543,10 @@ def add_to_cart_via_api(offer_id, quantity=1):
         else:
             print(f"✗ API call failed: {result.get('error')}")
             return False
-                
+            
     except Exception as e:
-        print(f"Failed to add to cart via API: {str(e)}")
-        take_screenshot("api_add_error")
-        return False 
+        print(f"✗ Error in API call: {e}")
+        return False
 
 def navigate_to_cart_directly():
     # Navigate to the cart page directly by URL
@@ -559,7 +574,7 @@ def navigate_to_cart_directly():
 def check_cart_contents(sku, expected_quantity=1):
     # Verify our item is in the basket
     cart_items = driver.find_elements(By.CSS_SELECTOR, 
-        "div[class*='cart-list__item'][id^='basket-basket_item_']")
+        "div[class*='cart-table__item'][id^='basket-item-']")
     total_qty = 0
     found = False
     
@@ -567,7 +582,8 @@ def check_cart_contents(sku, expected_quantity=1):
         if str(sku) in cart_item.text:
             found = True
             # Get quantity directly in element counter
-            qty_input = cart_item.find_element(By.CLASS_NAME, "counter__input")
+            qty_input = cart_item.find_element(By.CSS_SELECTOR, 
+                "[data-entity='basket-item-quantity-field']")
             qty = int(qty_input.get_attribute('value'))
             total_qty += qty
             print(f"✓ Found SKU {sku}, quantity: {qty}")
@@ -582,7 +598,7 @@ def check_cart_contents(sku, expected_quantity=1):
 def get_total_price_basket(order):
     # Extract the total price from the Cart price block
     try:
-        price_text = driver.find_element(By.CLASS_NAME, 'cart-panel__result-price').text
+        price_text = driver.find_element(By.CLASS_NAME, 'cart-panel__price').text
         price = extract_price(price_text)
         if price is not None:
             order.summary['basket_price'] = price
@@ -598,7 +614,7 @@ def get_total_price_basket(order):
 def proceed_to_checkout():
     # Click the checkout button, verify Basket > Order page
     try:
-        checkout_button = driver.find_element(By.CSS_SELECTOR, ".btn.btn-primary.text-uppercase.w-100.fs-18.fs-xxl-24")
+        checkout_button = driver.find_element(By.CSS_SELECTOR, "[data-entity='basket-checkout-button']")
         if checkout_button and checkout_button.is_displayed():
             print(f"Found checkout button")
                                 
@@ -625,31 +641,27 @@ def proceed_to_checkout():
             return False
         
     except Exception as e:
-        print(f"Failed to proceed to checkout: {str(e)}")
+        print(f"✗ Failed to proceed to checkout: {str(e)}")
         take_screenshot("checkout_error")
         return False
-
+    
 def _select_pickup_location(order):
     try:
-        # Wait for the pickup list to appear
+        # Wait for the pickup points container to appear
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "delivery-map__list"))
-        )
-        
-        # Wait for buttons to have text (list fully loaded)
-        WebDriverWait(driver, 10).until(
-            lambda d: any(
-                btn.text.strip() == "Заберу здесь" 
-                for btn in d.find_elements(By.CSS_SELECTOR, ".delivery-map__item button")
-            )
+            EC.presence_of_element_located((By.CLASS_NAME, "pickup-points"))
         )
         time.sleep(0.5)
         
-        # Now get all pickup items (fresh after wait)
-        all_items = driver.find_elements(By.CLASS_NAME, "delivery-map__item")
-        print(f"Total items found: {len(all_items)}")
+        # Get all pickup point items (tile-radio divs)
+        all_items = driver.find_elements(By.CSS_SELECTOR, ".pickup-points .tile-radio")
+        print(f"Total pickup points found: {len(all_items)}")
         
-        # Filter out pre-pay-only locations
+        if not all_items:
+            print("✗ No pickup locations found")
+            return False
+        
+        # Filter out pre-pay-only locations (text-danger inside the label)
         usable_items = []
         for item in all_items:
             danger_warnings = item.find_elements(By.CLASS_NAME, "text-danger")
@@ -661,41 +673,45 @@ def _select_pickup_location(order):
             take_screenshot("all_prepay_only")
             return False
         
-        print(f"Found {len(usable_items)} usable locations")
+        print(f"Found {len(usable_items)} usable locations (filtered out {len(all_items) - len(usable_items)} pre-pay only)")
         
-        # Pick random and find its button by index
-        chosen_index = all_items.index(random.choice(usable_items))
-        print(f"Chosen item index: {chosen_index}")
+        # Pick a random location
+        chosen = random.choice(usable_items)
         
-        # Get title for logging
+        # Get the location name from the label
         try:
-            title_elem = all_items[chosen_index].find_element(By.CLASS_NAME, "delivery-map__title")
-            location_name = title_elem.text.split("\n")[0][:80]
+            label = chosen.find_element(By.CSS_SELECTOR, ".form-check-label")
+            location_name = label.text.split("\n")[0][:80]
             print(f"Selected: {location_name}")
         except:
-            print("Could not extract title")
+            print("Could not extract location name")
         
-        # Find the button by index (avoids stale elements from earlier queries)
-        buttons = driver.find_elements(By.CSS_SELECTOR, ".delivery-map__item button")
-        if chosen_index < len(buttons):
-            pickup_button = buttons[chosen_index]
-            print(f"Button text: '{pickup_button.text}'")
-            
-            # Scroll and click
-            driver.execute_script(
-                "arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", 
-                pickup_button
-            )
-            time.sleep(0.3)
-            
-            # Click via JS directly
-            driver.execute_script("arguments[0].click();", pickup_button)
-            time.sleep(1)
-            print("✓ Pickup location click attempted")
-            return True
+        # Find the radio input and click its label
+        radio_input = chosen.find_element(By.CSS_SELECTOR, "input[type='radio']")
+        radio_id = radio_input.get_attribute("id")
+        print(f"Radio ID: {radio_id}")
+        
+        # Click the label (more reliable than clicking the radio directly)
+        label = chosen.find_element(By.CSS_SELECTOR, f"label[for='{radio_id}']")
+        
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", 
+            label
+        )
+        time.sleep(0.3)
+        
+        # Click the label via JS
+        driver.execute_script("arguments[0].click();", label)
+        time.sleep(1)
+        
+        # Verify the radio is checked
+        is_checked = radio_input.is_selected()
+        if is_checked:
+            print("✓ Pickup location selected and confirmed")
         else:
-            print(f"✗ Button index {chosen_index} out of range ({len(buttons)} buttons)")
-            return False
+            print("✗ Pickup click performed but radio not confirmed as checked")
+        
+        return True
         
     except Exception as e:
         print(f"✗ Failed to select pickup location: {str(e)}")
@@ -703,24 +719,15 @@ def _select_pickup_location(order):
         take_screenshot("pickup_selection_error")
         return False
     
+    
 def click_delivery_option(order):
     try:
-        # Wait for the loader overlay to disappear
-        try:
-            WebDriverWait(driver, 15).until(
-                EC.invisibility_of_element_located((By.CSS_SELECTOR, "#CART-SIDEBAR-TARGET.loader"))
-            )
-            print("Loader disappeared")
-            time.sleep(0.5)
-        except:
-            print("Loader not found or already gone")
-    
         delivery = order.selected_delivery
         delivery_name = delivery['local_name']
         delivery_en = delivery['en_name']
         delivery_id = delivery['opt_id']
-        
-        # Step 1: Click the delivery radio/label 
+
+         # Step 1: Click the delivery radio/label 
         try:
             delivery_label = wait.until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, f"label[for='{delivery_id}']"))
@@ -742,11 +749,12 @@ def click_delivery_option(order):
         
         # Courier, express courier, EMS — no sub-action needed
         return True
-        
+
     except Exception as e:
         print(f"✗ Error in delivery selection: {str(e)}")
         take_screenshot("delivery_option_error")
         return False
+
 
 def click_payment_option(order):
     try:
@@ -806,17 +814,18 @@ def click_payment_option(order):
     except Exception as e:
         print(f"✗ Error when clicking the payment option: {str(e)}")
         take_screenshot("payment_option_error")
-        return False     
-                                                                                                    
+        return False
+
+                                                                                                  
 def fill_order_form(user_email, test_phone, order):
     try:
-        ship_to = choose_address(order) #is a string
+        ship_to = choose_address(order) #is a dictionary
         print(f"Chosen address: {ship_to}")
         
         # Wait for the form to be present
-        WebDriverWait(driver, 5).until(
-            EC.presence_of_element_located((By.ID, "bx-input-order-EMAIL"))
-        )        
+        WebDriverWait(driver, 5).until(EC.presence_of_element_located(
+            (By.ID, "bx-soa-order-form"))
+        )
         print("Form found, starting to fill fields...")
         
         # Contact information
@@ -825,31 +834,21 @@ def fill_order_form(user_email, test_phone, order):
         # Email field
         try:
             email_field = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.ID, "bx-input-order-EMAIL"))
+                EC.visibility_of_element_located((By.ID, "bx-input-order-EMAIL"))
             )
-            # Click to focus first
-            email_field.click()
-            time.sleep(0.3)
-    
-            # Select all existing text and delete with keyboard
-            email_field.send_keys(Keys.CONTROL + "a")
-            email_field.send_keys(Keys.DELETE)
-            time.sleep(0.2)
-    
-            # Type the email
+            email_field.clear()
             email_field.send_keys(user_email)
             print("Email field filled")
-        
         except Exception as e:
             print(f"✗ Error with email field: {str(e)}")
-            traceback.print_exc()
             take_screenshot("email_field_error")
             return False
         
         # Phone field
         try:
+            # Different selector - no ID
             phone_field = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "input[data-input='send']"))
+                EC.visibility_of_element_located((By.NAME, "ORDER_PROP_66"))
             )
             phone_field.click()
             phone_field.clear()
@@ -863,7 +862,7 @@ def fill_order_form(user_email, test_phone, order):
             sms_button.click()
             time.sleep(0.5)
             print("SMS button clicked, phone field filled")
-    
+            
         except Exception as e:
             print(f"✗ Error with phone field: {str(e)}")
             take_screenshot("phone_field_error")
@@ -877,12 +876,13 @@ def fill_order_form(user_email, test_phone, order):
             name_field.clear()
             name_field.send_keys("Алена Авто Тест")
             print("Name field filled")
+
         except Exception as e:
             print(f"✗ Error with name field: {str(e)}")
             take_screenshot("name_field_error")
-            return False
+            return False  
         
-        # Order comment
+         # Order comment (2 lines)
         try:
             comment_field = driver.find_element(By.ID, "bx-input-order-USER_DESCRIPTION")
             driver.execute_script('arguments[0].value = "Алена Авто Тест\\nЭтот заказ сделан моими усердными миньонами";', comment_field)
@@ -891,7 +891,7 @@ def fill_order_form(user_email, test_phone, order):
         except Exception as e:
             print(f"✗ Error with comment field: {str(e)}")
             take_screenshot("comment_field_error")
-        
+
         # Shipping address
         print("Filling shipping address...")
 
@@ -980,10 +980,12 @@ def fill_order_form(user_email, test_phone, order):
         print("Billing address remains same as shipping (default)")
         
         print("✓ Order form filled successfully")
-        return True 
+        return True
         
     except Exception as e:
-        print(f"Error filling order form: {str(e)}")
+        print(f"✗ Error filling order form: {str(e)}")
+        # Add traceback to see where it's failing
+        traceback.print_exc()
         take_screenshot("order_form_error")
         return False
 
@@ -1031,6 +1033,7 @@ def verify_order_fee(order):
         print(f"✗ Error verifying order fees: {str(e)}")
         take_screenshot("fee_verification_error")
         return False, "Error"
+              
 
 def place_order():
     # Finalize the order by clicking the checkout button on the order form
@@ -1058,7 +1061,7 @@ def place_order():
     
 def get_order_number():
     # Get the order number from the URL of the confirmation page
-    # URL is like: https://ermenrich.ru/order/?ORDER_ID=T-ERM-456320
+    # URL is like: https://levenhuk.com/order/?ORDER_ID=T-B2C-US-41574
     try:
         current_url = driver.current_url
         if "ORDER_ID=" in current_url:
@@ -1079,7 +1082,7 @@ def get_order_number():
         print(f"✗ Error in final order submission: {str(e)}")
         take_screenshot("final_order_error")
         return False
-
+    
 def generate_test_plan(order):
     third_party_deliveries = [
         d for d in order.delivery_options
@@ -1132,8 +1135,10 @@ def generate_test_plan(order):
     
     print(f'\nGenerated test plan with {len(plan)} combo(s)')
     return plan
-    
-def execute_single_order(order):
+
+
+# Main execution
+def execite_single_order(order):
     global driver, wait
     user_email = order.user_email
     test_phone = order.user_phone
@@ -1142,7 +1147,7 @@ def execute_single_order(order):
         # Initialize step counter
         step_counter = StepCounter()
         print("---------------LOGS FOR NERDS---------------")
-        
+
         print(f'Chosen delivery: {order.selected_delivery['local_name']}')
         print(f'Chosen payment: {order.selected_payment['local_name']}')
 
@@ -1215,11 +1220,11 @@ def execute_single_order(order):
                                     delivery_success = click_delivery_option(order)
                                     if delivery_success:
                                         order.summary['delivery_option'] = order.selected_delivery['local_name']
-                                    
+
                                     step_counter.print_step("Clicking payment option")
                                     payment_success = click_payment_option(order)
                                     if payment_success:
-                                        order.summary['payment_option'] = order.selected_payment['local_name']
+                                        order.summary['payment_option'] = order.selected_payment['local_name']                                   
                                   
                                     time.sleep(2)
                                     step_counter.print_step("Verifying delivery and payment fees...")
@@ -1316,7 +1321,7 @@ def run_test_plan(order, emails, order_counter):
     # Return how many emails were used (0-indexed)
     return orders_made, email_switches
 
-def main_ru_erm(email, phone, emails=None, order_counter=0):
+def main_ru_lvh(email, phone, emails=None, order_counter=0):
     global driver, wait
     
     if emails is None:
@@ -1330,5 +1335,5 @@ def main_ru_erm(email, phone, emails=None, order_counter=0):
     return orders_made, email_index
 
 if __name__ == "__main__":
-    main_ru_erm()
+    main_ru_lvh()
 
