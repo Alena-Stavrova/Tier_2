@@ -159,7 +159,7 @@ class OrderContextRU(ParentContext):
     
         self.sku_lists = {
             'price_classes': {
-                0: [77830, 86570, 76825, 69036, 79583, 
+                0: [77830, 86570, 76825, 69037, 79583, 
                     78374, 72111, 81698, 80335, 85312]
             }
         }
