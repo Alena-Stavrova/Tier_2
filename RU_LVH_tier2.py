@@ -1138,7 +1138,7 @@ def generate_test_plan(order):
 
 
 # Main execution
-def execite_single_order(order):
+def execute_single_order(order):
     global driver, wait
     user_email = order.user_email
     test_phone = order.user_phone

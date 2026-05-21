@@ -1,5 +1,6 @@
 # Russian websites
 import RU_ERM_tier2 as ru_erm
+import RU_LVH_tier2 as ru_lvh
 #import RU LVH
 # EU Levenhuks
 import BG_LVH_tier2 as bg_lvh
@@ -30,7 +31,7 @@ script_modules = {
 
 script_modules = {
     'ru_websites': {
-        'RU_ERM': ru_erm
+        'RU_LVH': ru_lvh
     }
 }
 
