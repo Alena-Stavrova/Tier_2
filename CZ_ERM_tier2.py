@@ -446,7 +446,7 @@ def get_offer_id(sku):
         # Extract the offer ID from the data attributes
         offer_id = product_card.get_attribute('data-offer-id')
         if offer_id:
-            print("✓ Found offer ID {offer_id}")
+            print(f"✓ Found offer ID {offer_id}")
             return int(offer_id)
         else:
             print("✗ No offer ID found on container")
@@ -962,7 +962,6 @@ def fill_order_form(user_email, test_phone):
             print(f"✗ Error with postal code field: {str(e)}")
             take_screenshot("postal_code_field_error")
             return False
-        
         
         take_screenshot("order_form_filled")
         print("✓ Order form filled successfully")
