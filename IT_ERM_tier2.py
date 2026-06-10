@@ -663,6 +663,12 @@ def click_payment_option(order):
         # Get default payment from order context
         default = order.get_default_payment()
         default_name = default['local_name'] if default else None
+
+        # Wait for payment section to stabilize (page may re-render after delivery change)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "bx-payment-method"))
+        )
+        time.sleep(0.5)
         
         # Only interact with UI if not default
         if selected_name != default_name:
