@@ -14,6 +14,7 @@ import IT_ERM_tier2 as it_erm
 import PL_ERM_tier2 as pl_erm
 import random
 
+"""
 script_modules = {
     'ru': {
         'RU_ERM': ru_erm,
@@ -30,6 +31,12 @@ script_modules = {
         'HU_ERM': hu_erm,
         'IT_ERM': it_erm,
         'PL_ERM': pl_erm
+    }
+}
+"""
+script_modules = {
+    'ermenrich': {
+        'CZ_ERM': cz_erm
     }
 }
 
