@@ -5,7 +5,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import ElementClickInterceptedException, StaleElementReferenceException
-from selenium.common.exceptions import TimeoutException
 import time
 import re
 import random
@@ -162,15 +161,15 @@ class ParentContext:
         self.summary.update(kwargs)
 
     def format_fee_display(self, amount, display_text):
-            if display_text and 'TBD' in str(display_text).upper():
-                self.summary['order_fee'] = display_text
-                self.summary['order_fee_amount'] = None
-            elif self.free_shipping_phrase and display_text == self.free_shipping_phrase:
-                self.summary['order_fee'] = f"0 {self.currency}"
-                self.summary['order_fee_amount'] = 0
-            else:
-                self.summary['order_fee'] = f"{amount} {self.currency}" if amount is not None else display_text
-                self.summary['order_fee_amount'] = amount
+        if display_text and 'TBD' in str(display_text).upper():
+            self.summary['order_fee'] = display_text
+            self.summary['order_fee_amount'] = None
+        elif self.free_shipping_phrase and display_text == self.free_shipping_phrase:
+            self.summary['order_fee'] = f"0 {self.currency}"
+            self.summary['order_fee_amount'] = 0
+        else:
+            self.summary['order_fee'] = f"{amount} {self.currency}" if amount is not None else display_text
+            self.summary['order_fee_amount'] = amount
 
 class OrderContextCZ(ParentContext):
     def __init__(self):
@@ -767,7 +766,7 @@ def select_ppl(order):
         stable = wait_until_selection_stable("ID_SHIPPING_METHOD_ID_", ppl_option['opt_id'])
         if not stable:
             print("✗ Could not get PPL radio to stick")
-            return False, 'ppl parcel box'
+            return False
         print("PPL delivery selected")
 
         if not _wait_for_payment_options(order):
@@ -782,7 +781,7 @@ def select_ppl(order):
         
         if not pickup_buttons:
             print("✗ No PPL pickup points found")
-            return False, 'ppl parcel box'
+            return False
         
         # Choose a random pickup point
         chosen_button = random.choice(pickup_buttons)
@@ -957,7 +956,7 @@ def click_delivery_option(order):
             except Exception as e:
                 print(f"✗ Failed to confirm shop pickup: {str(e)}")
                 take_screenshot("shop_pickup_confirmation_error")
-                return False, selected_name
+                return False
 
     except Exception as e:
         print(f"✗ Error when clicking the delivery option: {str(e)}")
@@ -1358,6 +1357,28 @@ def get_order_number():
         take_screenshot("final_order_error")
         return False
 
+def reverify_before_submit(order, attr_name, options_list, id_prefix):
+    # Final ground-truth check right before submitting — a late re-render (e.g. during
+    # fee verification) can silently reset a selection after we already confirmed it
+    intended = getattr(order, attr_name)
+    if intended is None:
+        return
+
+    current_id = get_checked_option_id(id_prefix)
+    if current_id and current_id != intended['opt_id']:
+        print(f"⚠ {attr_name} drifted before submission: was {intended['local_name']}, attempting to re-select it...")
+        force_click_option(intended['opt_id'])
+        wait_until_selection_stable(id_prefix, intended['opt_id'])
+
+        current_id = get_checked_option_id(id_prefix)
+        final_option = next((o for o in options_list if o['opt_id'] == current_id), intended)
+        setattr(order, attr_name, final_option)
+
+        if current_id == intended['opt_id']:
+            print(f"✓ Re-selected {intended['local_name']} successfully")
+        else:
+            print(f"✗ Could not restore {intended['local_name']}; proceeding with {final_option['local_name']}")
+
 def generate_test_plan(order):
     third_party_deliveries = [
         d for d in order.delivery_options
@@ -1369,6 +1390,7 @@ def generate_test_plan(order):
         if p.get('is_third_party', False)
     ]
 
+    price_classes_to_cover = [0, 1]
     plan = []
     uncovered_payments = set(p['en_name'] for p in third_party_payments)
 
@@ -1398,12 +1420,18 @@ def generate_test_plan(order):
                     chosen_payment = random.choice(compatible_third_party)
     
         # Case 2: Only third-party deliveries exist, no third-party payments
-        elif third_party_deliveries:
+        else:
             if compatible_payments:
                 chosen_payment = random.choice(compatible_payments)
         
         if chosen_payment:
-            price_class = determine_price_class(chosen_payment)
+            if len(price_classes_to_cover) == 2:
+                price_class = determine_price_class(chosen_payment)
+                price_classes_to_cover.remove(price_class)
+            elif len(price_classes_to_cover) == 1:
+                price_class = price_classes_to_cover[0]
+            else:
+                price_class = determine_price_class(chosen_payment) 
             plan.append({
                 'delivery': delivery,
                 'payment': chosen_payment,
@@ -1535,34 +1563,11 @@ def execute_single_order(order):
                                             
                                     step_counter.print_step("Placing order")
                                         
-                                    # Final check: re-verify payment selection right before submitting,
-                                    # in case a late re-render (e.g. fee verification) caused drift after our earlier check
-                                    final_payment_option = order.selected_payment  # default: assume no drift
-                                    final_payment_id = get_checked_option_id("ID_PAY_SYSTEM_ID_")
+                                    reverify_before_submit(order, 'selected_payment', order.payment_options, "ID_PAY_SYSTEM_ID_")
+                                    reverify_before_submit(order, 'selected_delivery', order.delivery_options, "ID_SHIPPING_METHOD_ID_")
                                     
-                                    if final_payment_id and final_payment_id != order.selected_payment['opt_id']:
-                                        intended_id = order.selected_payment['opt_id']
-                                        intended_name = order.selected_payment['local_name']
-                                        print(f"✗ Payment drifted before submission: was {order.selected_payment['local_name']}, now {final_payment_option['local_name']}")
-                                                                            
-                                        # Try to re-establish the originally intended selection
-                                        force_click_option(intended_id)
-                                        wait_until_selection_stable("ID_PAY_SYSTEM_ID_", intended_id)
-                                    
-                                        # Re-read ground truth after the recovery attempt
-                                        final_payment_id = get_checked_option_id("ID_PAY_SYSTEM_ID_")
-                                        final_payment_option = next(
-                                            (opt for opt in order.payment_options if opt['opt_id'] == final_payment_id),
-                                            order.selected_payment
-                                        )
-                                    
-                                        if final_payment_id == intended_id:
-                                            print(f"✓ Re-selected {intended_name} successfully")
-                                        else:
-                                            print(f"✗ Could not restore {intended_name}; proceeding with {final_payment_option['local_name']}")
-                                                                            
-                                    order.selected_payment = final_payment_option
-                                    order.summary['payment_option'] = final_payment_option['local_name']
+                                    order.summary['payment_option'] = order.selected_payment['local_name']
+                                    order.summary['delivery_option'] = order.selected_delivery['local_name']
                                     
                                     order_result = place_order()
 

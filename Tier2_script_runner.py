@@ -36,7 +36,7 @@ script_modules = {
 """
 script_modules = {
     'ermenrich': {
-        'CZ_ERM': cz_erm
+        'IT_ERM': it_erm
     }
 }
 
