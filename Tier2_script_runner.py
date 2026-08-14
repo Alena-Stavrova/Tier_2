@@ -36,10 +36,9 @@ script_modules = {
 """
 script_modules = {
     'ermenrich': {
-        'IT_ERM': it_erm
+        'PL_ERM': pl_erm
     }
 }
-
 
 
 # Max orders per brand (with buffer for IT's variability)

@@ -160,12 +160,14 @@ class ParentContext:
 class OrderContextBG(ParentContext):
     def __init__(self):
         super().__init__()
+        self.currency = "€"
+        self.displays_cents = True
+        self.free_shipping_phrase = 'Безплатна доставка'
     
         self.sku_lists = {
-            'price_classes': {
-                0: [69378, 72209, 81932, 69669, 79667], # Under 200 BGN
-
-                1: [73800, 78160, 67698, 70421, 84085] # 200+ BGN
+            "price_classes": {
+                0: [69378, 72209, 67684, 69669, 79667],  # Under 106€
+                1: [73800, 78160, 67698, 70421, 84085],  # 106+ €
             }
         }
      
@@ -216,10 +218,10 @@ class OrderContextBG(ParentContext):
         self.fees = {
                 'shipping': {
                     'standard': {
-                        'under_200': {
+                        'under_106': {
                             'display': 'TBD'
                         },
-                        'over_200': {
+                        'over_106': {
                             'display': 'Безплатна доставка'
                         }
                     }
@@ -245,9 +247,27 @@ class OrderContextBG(ParentContext):
         return None, None
     
     def get_expected_total_fee(self):
-        # Just return the shipping fee display string
-        ship_display, _ = self.get_expected_shipping_fee()
-        return ship_display, None
+        ship_display, ship_amount = self.get_expected_shipping_fee()
+        
+        if ship_display is None:
+            return None, None
+        
+        # Add payment fee if applicable
+        pay_display, pay_amount = self.get_expected_payment_fee()
+        total_amount = (ship_amount or 0) + (pay_amount or 0)
+        
+        # Build display string
+        # Shipping is free and payment adds nothing
+        if ship_display == self.free_shipping_phrase and (pay_amount is None or pay_amount == 0):
+            total_display = self.free_shipping_phrase
+        # TBD
+        elif ship_display and 'TBD' in str(ship_display).upper():
+            total_display = ship_display 
+        # Calculate cost in numbers 
+        else:
+            total_display = f"{total_amount}{self.currency}"
+        
+        return total_display, total_amount
     
 
 def determine_price_class(payment_option):
@@ -862,34 +882,30 @@ def verify_order_fee(order):
         print("Verifying order fees...")
         time.sleep(2)
 
-        # Get actual fee from page
         fee_element = wait.until(
             EC.presence_of_element_located((By.ID, "bx-cost-shipping"))
-        )    
-        actual_fee = fee_element.text
-        print(f"Actual fee on page: '{actual_fee}'")
+        )
+        actual_fee_text = fee_element.text
+        print(f"Actual fee on page: '{actual_fee_text}'")
 
-        # Get expected fee from order context
-        expected_display, _ = order.get_expected_total_fee()
-        order.summary['expected_fee'] = expected_display
-        
-        if expected_display is None:
-            print(f"✗ Can't determine expected fee")
-            return False, actual_fee
-        
-        if actual_fee == expected_display:
-            print(f"✓ Fee verified: {actual_fee}")
-            return True, actual_fee
+        expected_display, expected_amount = order.get_expected_total_fee()
+        order.format_fee_display(expected_amount, actual_fee_text)
+
+        # Compare display strings (no numbers)
+        if actual_fee_text == expected_display:
+            print(f"✓ Fee verified: {actual_fee_text}")
+            return True
         else:
-            print(f"✗ Fee mismatch: Expected '{expected_display}', got '{actual_fee}'")
-            return False, actual_fee
-        
-        #✗ Fee mismatch: Expected '{'display': 'noch festzulegen'}', got 'noch festzulegen'
-            
+            print(
+                f"✗ Fee mismatch: Expected '{expected_display}', got '{actual_fee_text}'"
+            )
+            return False
+
     except Exception as e:
         print(f"✗ Error verifying order fees: {str(e)}")
         take_screenshot("fee_verification_error")
-        return False, "Error"
+        return False
+
 
 def place_order():
     # Finalize the order by clicking the checkout button on the order form
@@ -1147,8 +1163,10 @@ def execute_single_order(order):
             print(f"Order number: {test_order_num}") # Will return False in case of error
         else:
             print("Order number: order wasn't placed")
-        print(f"Chosen SKU: {order.sku['selected']}")
-        print(f"Item price: {order.summary['basket_price']} лв")
+        if order.displays_cents:
+            print(f"Item price: {order.summary['basket_price']} {order.currency}")
+        else:
+            print(f"Item price: {int(order.summary['basket_price'])} {order.currency}")
         print(f"Delivery option: {order.summary['delivery_option']}")
         print(f"Payment option: {order.summary['payment_option']}")
 

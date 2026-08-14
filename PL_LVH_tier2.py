@@ -198,7 +198,7 @@ class OrderContextPL(ParentContext):
                 'is_default': True,
                 'is_third_party': True,
                 'compatible_with': {
-                    'delivery':['dostawa kurierem', 'odbiór osobisty w sklepie levenhuk', 'inpost'],
+                    'delivery':['dostawa kurierem', 'odbiór osobisty w sklepie levenhuk', 'inpost paczkomaty'],
                     'price_class': [0, 1]
                 }
             },
@@ -217,7 +217,7 @@ class OrderContextPL(ParentContext):
                 'opt_id': 'ID_PAY_SYSTEM_ID_12',
                 'is_third_party': True,
                 'compatible_with': {
-                    'delivery':['dostawa kurierem', 'odbiór osobisty w sklepie levenhuk', 'inpost'],
+                    'delivery':['dostawa kurierem', 'odbiór osobisty w sklepie levenhuk', 'inpost paczkomaty'],
                     'price_class': [0, 1]
                 }
             }

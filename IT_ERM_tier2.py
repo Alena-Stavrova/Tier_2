@@ -806,56 +806,7 @@ def click_delivery_option(order):
                 return False
         else:
             print(f"Using default delivery option ({default_name}), no action needed")
-
-            try:
-                # Wait for loader to disappear
-                try:
-                    WebDriverWait(driver, 15).until(
-                        EC.invisibility_of_element_located((By.CSS_SELECTOR, "#CART-SIDEBAR-TARGET.loader"))
-                        )
-                    print("Loader disappeared")
-                    time.sleep(0.5)
-                except:
-                    print("Loader not found or already gone")
-                                    
-                pickup_point = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".delivery-map__list .delivery-map__item")))
-                                    
-                if not pickup_point:
-                    print("✗ No pickup points found.")
-                    return False
-            
-                # Look for the confirmation button INSIDE the chosen pickup point
-                confirm_button = pickup_point.find_element(By.CSS_SELECTOR, "button[data-set-shop]")
-                                    
-                # Ground truth: read what's actually checked
-                actual_id = get_checked_option_id("ID_SHIPPING_METHOD_ID_")
-                actual_option = next(
-                    (opt for opt in order.delivery_options if opt['opt_id'] == actual_id),
-                    selected
-                )
-                actual_name = actual_option['local_name']
-                order.selected_delivery = actual_option
-                            
-                if actual_id == selected_id:
-                    print(f"Confirmed delivery selection: {actual_name}")
-                else:
-                    print(f"✗ Intended {selected_name} but DOM shows {actual_name} - reporting actual state")
-                                            
-                if not _wait_for_payment_options(order):
-                    print("✗ Payment options not fully ready, but continuing...")
-            
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", confirm_button)
-                time.sleep(0.5)
-                confirm_button.click()
-                print("Shop pickup confirmed by clicking button inside list item.")
-                time.sleep(1)
-                                    
-                return True
-
-            except Exception as e:
-                print(f"✗ Failed to confirm shop pickup: {str(e)}")
-                take_screenshot("shop_pickup_confirmation_error")
-                return False
+            return True
     
     except Exception as e:
         print(f"✗ Error when clicking the delivery option: {str(e)}")
