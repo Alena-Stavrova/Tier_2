@@ -151,7 +151,18 @@ class ParentContext:
         for option in self.payment_options:
             if option.get('is_cash', False):
                 return option
-        return None            
+        return None
+
+    def format_fee_display(self, amount, display_text):
+        if display_text and 'TBD' in display_text.upper():
+            self.summary['order_fee'] = display_text  
+            self.summary['order_fee_amount'] = None   # Unknown but not null
+        elif self.free_shipping_phrase and display_text == self.free_shipping_phrase:
+            self.summary['order_fee'] = f"0 {self.currency}"
+            self.summary['order_fee_amount'] = 0
+        else:
+            self.summary['order_fee'] = f"{amount} {self.currency}"
+            self.summary['order_fee_amount'] = amount            
         
     def update_summary(self, **kwargs):
         self.summary.update(kwargs)
@@ -232,13 +243,13 @@ class OrderContextBG(ParentContext):
         if not self.selected_delivery:
             return None, None
 
-        price_class = self.sku['price_class']  # 0 = under 70, 1 = over 70
+        price_class = self.sku['price_class']  # 0 = under 106, 1 = over 106
 
         # Only have standard delivery
         if price_class == 0:  
-            tier = 'under_200'
+            tier = 'under_106'
         else:  
-            tier = 'over_200'
+            tier = 'over_106'
 
         return self.fees['shipping']['standard'][tier]['display'], None # Return display string only
     
@@ -1126,9 +1137,9 @@ def execute_single_order(order):
                                   
                                     time.sleep(2)
                                     step_counter.print_step("Verifying delivery and payment fees...")
-                                    fee_success, fee_display = verify_order_fee(order)
+                                    fee_success = verify_order_fee(order)
                                     if fee_success:
-                                        order.summary['order_fee'] = fee_display
+                                        pass
                                             
                                     step_counter.print_step("Placing order")
                                     order_result = place_order()

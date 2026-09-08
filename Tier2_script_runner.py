@@ -14,7 +14,6 @@ import IT_ERM_tier2 as it_erm
 import PL_ERM_tier2 as pl_erm
 import random
 
-"""
 script_modules = {
     'ru': {
         'RU_ERM': ru_erm,
@@ -33,12 +32,7 @@ script_modules = {
         'PL_ERM': pl_erm
     }
 }
-"""
-script_modules = {
-    'ermenrich': {
-        'PL_ERM': pl_erm
-    }
-}
+
 
 
 # Max orders per brand (with buffer for IT's variability)
