@@ -80,6 +80,7 @@ class ParentContext:
             'delivery_option': None,
             'payment_option': None,
             'basket_price': None,
+            'basket_price_discounted': None,
             'order_result': None,
             'expected_fee': None,
             'order_fee': None,
@@ -1094,6 +1095,7 @@ def verify_discount_math(order, expected_discount_pct):
         
         if round(expected_total) == round(new_total):
             print(f"✓ Discount math verified: {item_price} - {int(expected_discount_pct*100)}% + {delivery_cost} = {new_total}")
+            order.summary['basket_price_discounted'] = float(discounted_item_price)
             return True
         else:
             print(f"✗ Discount math mismatch:")
@@ -1348,7 +1350,10 @@ def execute_single_order(order):
         else:
             print("Order number: order wasn't placed")
         print(f"Chosen SKU: {order.sku['selected']}")
-        print(f"Item price: {order.summary['basket_price']} {order.currency}")
+        if order.summary['discount'] is None:
+            print(f"Item price: {order.summary['basket_price']} {order.currency}")
+        else:
+            print(f'Item: {order.summary['basket_price']}{order.currency} → discounted: {order.summary['basket_price_discounted']}{order.currency}')
         print(f'Chosen region: {order.sku['region']}')
         print(f"Delivery option: {order.summary['delivery_option']}")
         print(f"Payment option: {order.summary['payment_option']}")
