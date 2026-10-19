@@ -830,16 +830,16 @@ def fill_order_form(user_email, test_phone, order):
             # Click to focus first
             email_field.click()
             time.sleep(0.3)
-    
+            
             # Select all existing text and delete with keyboard
             email_field.send_keys(Keys.CONTROL + "a")
             email_field.send_keys(Keys.DELETE)
             time.sleep(0.2)
-    
+            
             # Type the email
             email_field.send_keys(user_email)
             print("Email field filled")
-        
+                
         except Exception as e:
             print(f"✗ Error with email field: {str(e)}")
             traceback.print_exc()
@@ -1097,10 +1097,11 @@ def generate_test_plan(order):
 
     delivery = random.choice(third_party_deliveries)
     # Expect only one 3rd-party payment (банковская карта онлайн)
-    if len(third_party_payments) > 1:
-        print("Uh oh, more than 1 third-party payments, need to update test plan generation")
+    if len(third_party_payments) != 1:
+        print("✗ WARNING: unexpected number of third-party payments")
     else:
         # If only 1 3rd-party payment found (as expected), pair it with any 3rd-party delivery
+        # Credit card is compatible with any delivery
         region = random.choice(delivery.get('compatible_with', {}).get('region', []))
         plan.append({
             'region': region,
@@ -1131,6 +1132,8 @@ def generate_test_plan(order):
                 print(f"✗ Warning: No compatible payments for {delivery['en_name']}")
     
     print(f'\nGenerated test plan with {len(plan)} combo(s)')
+    print('Tier 2: testing every 3rd-party delivery and payment option at least once')
+    print(f'{len(third_party_deliveries)} 3rd-party deliveries, {len(third_party_payments)} 3rd-party payments')
     return plan
     
 def execute_single_order(order):

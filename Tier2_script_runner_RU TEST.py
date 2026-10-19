@@ -1,33 +1,7 @@
 # Russian websites
 import RU_ERM_tier2 as ru_erm
 import RU_LVH_tier2 as ru_lvh
-#import RU LVH
-# EU Levenhuks
-import BG_LVH_tier2 as bg_lvh
-import EU_LVH_tier2 as eu_lvh
-import HU_LVH_tier2 as hu_lvh
-import PL_LVH_tier2 as pl_lvh
-# EU Ermenrichs
-import CZ_ERM_tier2 as cz_erm
-import HU_ERM_tier2 as hu_erm
-import IT_ERM_tier2 as it_erm
-import PL_ERM_tier2 as pl_erm
-import random
 
-script_modules = {
-    'levenhuk': {
-        'BG_LVH': bg_lvh,
-        'EU_LVH': eu_lvh,
-        'HU_LVH': hu_lvh,
-        'PL_LVH': pl_lvh
-    },
-    'ermenrich': {
-        'CZ_ERM': cz_erm,
-        'HU_ERM': hu_erm,
-        'IT_ERM': it_erm,
-        'PL_ERM': pl_erm
-    }
-}
 
 script_modules = {
     'ru_websites': {
@@ -71,7 +45,8 @@ for brand, modules in script_modules.items():
         print(f"Running {script_name} with email: {current_email}")
         print(f"Backup emails available: {len(remaining_emails)-1}")
         print(f"{'='*60}")
-        
+
+        print(test_phone)
         orders_made, new_email_index = main_function(current_email, test_phone, remaining_emails, order_counter)
         order_counter += orders_made
         
@@ -79,3 +54,8 @@ for brand, modules in script_modules.items():
         email_index += new_email_index  # Add the relative index change
         
         print(f"Orders so far for {brand}: {order_counter}, Email index: {email_index}")
+
+
+#File "C:\Users\astavrova\Desktop\Алена (врем.)\1 - GitHub\Tier_2\RU_LVH_tier2.py", line 1628, in run_test_plan
+    #print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']}')
+#TypeError: 'NoneType' object is not subscriptable

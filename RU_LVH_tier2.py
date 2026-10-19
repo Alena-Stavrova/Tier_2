@@ -75,6 +75,8 @@ class ParentContext:
 
         self.selected_payment = None
 
+        self.is_company = None
+
         # Results summary
         self.summary = {
             'delivery_option': None,
@@ -179,7 +181,7 @@ class OrderContextRU(ParentContext):
                 'is_default': True,
                 'compatible_with': {
                     'region': ['St. Petersburg'],
-                    'payment': ['credit card', 'bank transfer', 'yandex split']
+                    'payment': ['credit card', 'bank transfer', 'yandex split', 'cashless payment (legal entities)']
                 }
                 # Академическая - только предоплаченные заказы!
                 },
@@ -192,7 +194,7 @@ class OrderContextRU(ParentContext):
                     'region': ['St. Petersburg', 'regions'],
                     # "Оплата при получении" = "cash on delivery"
                     # "Наличными курьеру" = "cash on delivery (courier)"
-                    'payment': ['credit card', 'cash on delivery (courier)', 'bank transfer', 'yandex split']
+                    'payment': ['credit card', 'cash on delivery (courier)', 'bank transfer', 'yandex split', 'cashless payment (legal entities)']
                 }
             },
             {
@@ -202,7 +204,7 @@ class OrderContextRU(ParentContext):
                 'is_default': True,
                 'compatible_with': {
                     'region': ['Moscow'],
-                    'payment': ['credit card', 'cash on delivery (courier)', 'bank transfer', 'yandex split']
+                    'payment': ['credit card', 'cash on delivery (courier)', 'bank transfer', 'yandex split', 'cashless payment (legal entities)']
                 }
             },
             {
@@ -211,7 +213,7 @@ class OrderContextRU(ParentContext):
                 'opt_id': 'ID_SHIPPING_METHOD_ID_3',
                 'compatible_with': {
                     'region': ['Moscow'],
-                    'payment': ['credit card', 'cash on delivery (courier)', 'bank transfer', 'yandex split']
+                    'payment': ['credit card', 'cash on delivery (courier)', 'bank transfer', 'yandex split', 'cashless payment (legal entities)']
                 }
             },
             {
@@ -220,7 +222,7 @@ class OrderContextRU(ParentContext):
                 'opt_id': 'ID_SHIPPING_METHOD_ID_5',
                 'compatible_with': {
                     'region': ['Moscow'],
-                    'payment': ['credit card', 'bank transfer', 'yandex split']
+                    'payment': ['credit card', 'bank transfer', 'yandex split', 'cashless payment (legal entities)', 'cashless payment (legal entities)']
                 }
                 # Лубянка - только предоплаченные заказы!
             },
@@ -233,7 +235,7 @@ class OrderContextRU(ParentContext):
                     'region': ['regions'],
                     # "Оплата при получении" = "cash on delivery"
                     # "Наличными курьеру" = "cash on delivery (courier)"
-                    'payment': ['credit card', 'cash on delivery', 'bank transfer', 'yandex split']
+                    'payment': ['credit card', 'cash on delivery', 'bank transfer', 'yandex split', 'cashless payment (legal entities)']
                 }
             },
             {
@@ -246,7 +248,7 @@ class OrderContextRU(ParentContext):
                     # "Оплата при получении" = "cash on delivery"
                     # "Наличными курьеру" = "cash on delivery (courier)"
                     # "Наложенный платеж" = "cash on delivery (ems)"
-                    'payment': ['credit card', 'bank transfer', 'cash on delivery (ems)', 'yandex split']
+                    'payment': ['credit card', 'bank transfer', 'cash on delivery (ems)', 'yandex split', 'cashless payment (legal entities)']
                 }
             },
         ]
@@ -281,6 +283,10 @@ class OrderContextRU(ParentContext):
              {   'local_name': 'наложенный платеж',
                 'en_name': 'cash on delivery (ems)',
                 'opt_id': 'ID_PAY_SYSTEM_ID_9',
+            },
+            {   'local_name': 'безналичная оплата (оплата от организации)',
+                'en_name': 'cashless payment (legal entities)',
+                'opt_id': 'ID_PAY_SYSTEM_ID_3'
             }
         ]
 
@@ -380,6 +386,32 @@ def choose_address(order):
 
     address = random.choice(region_lib)
     return(address) #returns a string
+
+def choose_tin(order):
+    tins = {
+    'Moscow': [
+        '5029104266', # МПК 
+        '7712024477', # МКВЗ
+        '5074045358' # Крафтбир
+    ],
+    'St. Petersburg': [
+        '7810756045', # Пряный хмель
+        '7839064872', # AF Brew
+        '7830001010' # Игристые вина
+    ],
+    'regions': [
+        '7203556558', # Тюмень БМ-Бир
+        '1659004418', # Казань Красный восток
+        '1000023761', # Петрозаводск Карельское пиво
+        '5406804315', # Новосибирск НПЗ
+        '7451305093'# Челябинск Лаборатория живого пива
+    ] 
+    }
+    chosen_region = order.sku['region']
+    tins_lib = tins[chosen_region]
+
+    tin = random.choice(tins_lib)
+    return(tin) #returns a string
 
 def extract_price(price_text):
     # Remove all characters except digits and the comma/dot
@@ -650,6 +682,10 @@ def _select_pickup_location(order):
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "pickup-points"))
         )
+        # Wait for at least one tile-radio to be present (list populated)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".pickup-points .tile-radio"))
+        )
         time.sleep(0.5)
         
         # Get all pickup point items (tile-radio divs)
@@ -718,7 +754,6 @@ def _select_pickup_location(order):
         take_screenshot("pickup_selection_error")
         return False
     
-    
 def click_delivery_option(order):
     try:
         delivery = order.selected_delivery
@@ -732,7 +767,7 @@ def click_delivery_option(order):
                 EC.element_to_be_clickable((By.CSS_SELECTOR, f"label[for='{delivery_id}']"))
             )
             driver.execute_script(
-                "arguments[0].scrollIntoView({block: 'center'});", delivery_label
+                "arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", delivery_label
             )
             time.sleep(0.3)
             delivery_label.click()
@@ -815,6 +850,32 @@ def click_payment_option(order):
         take_screenshot("payment_option_error")
         return False
 
+def click_payment_company(order):
+    try:
+        print("Only one payment option for legal entities...")
+        
+        selected = {   
+            'local_name': 'безналичная оплата (оплата от организации)',
+            'en_name': 'cashless payment (legal entities)',
+            'opt_id': 'ID_PAY_SYSTEM_ID_3'
+        }
+        
+        # Update order context
+        order.selected_payment = selected
+        selected_name = selected['local_name']
+        selected_id = selected['opt_id']
+
+        # Get default payment
+        default = order.get_default_payment()
+        default_name = default['local_name'] if default else None
+        
+        print(f"Using {selected_name} (virtual or default), no action needed")
+        return True, selected_name
+            
+    except Exception as e:
+        print(f"✗ Error in payment selection process: {str(e)}")
+        take_screenshot("payment_option_error")
+        return False, "Error"
                                                                                                   
 def fill_order_form(user_email, test_phone, order):
     try:
@@ -988,6 +1049,133 @@ def fill_order_form(user_email, test_phone, order):
         take_screenshot("order_form_error")
         return False
 
+def fill_company_order_form(user_email, test_phone, order):
+    try:
+        ship_to = choose_address(order) #is a dictionary
+        print(f"Chosen address: {ship_to}")
+        tin_num = choose_tin(order)
+        print(f"Chosen TIN: {tin_num}")
+
+        # Wait for the form to be present
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located(
+            (By.ID, "bx-soa-order-form"))
+        )
+        print("Form found, starting to fill fields...")
+        
+        # Contact information
+        print("Filling contact information...")
+        
+        # Email field
+        try:
+            email_field = WebDriverWait(driver, 10).until(
+                EC.visibility_of_element_located((By.ID, "bx-input-order-EMAIL"))
+            )
+            email_field.clear()
+            email_field.send_keys(user_email)
+            print("Email field filled")
+        except Exception as e:
+            print(f"✗ Error with email field: {str(e)}")
+            take_screenshot("email_field_error")
+            return False
+        
+        # Phone field
+        try:
+            # Different selector - no ID
+            phone_field = WebDriverWait(driver, 5).until(
+                EC.visibility_of_element_located((By.NAME, "ORDER_PROP_22"))
+            )
+            phone_field.click()
+            phone_field.clear()
+            phone_field.send_keys(test_phone)
+            print("Phone number entered")
+    
+            # Click "Отправить смс" button
+            sms_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-sms-submit='send']"))
+            )
+            sms_button.click()
+            time.sleep(0.5)
+            print("SMS button clicked, phone field filled")
+            
+        except Exception as e:
+            print(f"✗ Error with phone field: {str(e)}")
+            take_screenshot("phone_field_error")
+            return False
+        
+        # Name field
+        try:
+            name_field = WebDriverWait(driver, 5).until(
+                EC.visibility_of_element_located((By.ID, "bx-input-order-FIO_SHIP"))
+            )
+            name_field.clear()
+            name_field.send_keys('Алена Авто Тест')
+            print("Name field filled")
+
+        except Exception as e:
+            print(f"✗ Error with name field: {str(e)}")
+            take_screenshot("name_field_error")
+            return False  
+        
+        # TIN field
+        try:
+            # Click the ts-control to activate
+            ts_control = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "#bx-select-order-INN .ts-control"))
+            )
+            ts_control.click()
+            time.sleep(0.3)
+    
+            # Find the input inside
+            tin_input = ts_control.find_element(By.CSS_SELECTOR, "input")
+            tin_input.send_keys(tin_num)
+    
+            print(f"TIN entered: {tin_num}")
+            time.sleep(2)  # Wait for Dadata suggestions
+    
+            # Press Enter to select first suggestion
+            tin_input.send_keys(Keys.ENTER)
+            time.sleep(1)
+
+            # Wait for TomSelect address field to have a value
+            # TomSelect stores the value differently — check the hidden select
+            try:
+                WebDriverWait(driver, 10).until(
+                    lambda d: d.find_element(By.ID, "bx-input-order-FULL_ADDRESS_SEARCH_SHIP").get_attribute("value") != ""
+                )
+                print("Address auto-filled")
+            except:
+                print("✗ Address may not have auto-filled")
+                # Fallback: type the address manually from the API response?
+    
+        except Exception as e:
+            print(f"✗ Error with TIN field: {str(e)}")
+            traceback.print_exc()
+            take_screenshot("tin_field_error")
+            return False
+
+        # Order comment (2 lines)
+        try:
+            comment_field = driver.find_element(By.ID, "bx-input-order-USER_DESCRIPTION")
+            driver.execute_script('arguments[0].value = "Алена Авто Тест\\nЭтот заказ сделан моими усердными миньонами";', comment_field)
+            print("Comment field filled")
+        
+        except Exception as e:
+            print(f"✗ Error with comment field: {str(e)}")
+            take_screenshot("comment_field_error")
+     
+        # Billing address is the same as shipping (default tick remains)
+        print("Billing address remains same as shipping (default)")
+        
+        print("✓ Order form filled successfully")
+        return True
+        
+    except Exception as e:
+        print(f"✗ Error filling order form: {str(e)}")
+        # Add traceback to see where it's failing
+        traceback.print_exc()
+        take_screenshot("order_form_error")
+        return False
+
 def verify_order_fee(order):
     try:
         # Skip verification for third-party deliveries (no reference price)
@@ -1050,14 +1238,17 @@ def verify_discount_label(order, expected_discount_pct):
     try:        
         discount_section = driver.find_element(By.ID, "bx-order-discount")
         discount_visible = discount_section.is_displayed()
-        
+
+        # If no discount is expected
         if expected_discount_pct == 0:
+            # But discount % is still visible
             if discount_visible:
                 print("✗ Discount section visible but none expected!")
                 return False, "0% (unexpected)"
             print("✓ No discount (as expected)")
             return True, "0%"
-        
+
+        # If discount is expected, but not visible
         if not discount_visible:
             print("✗ Discount expected but section not visible!")
             return False, "0% (missing)"
@@ -1171,18 +1362,22 @@ def generate_test_plan(order):
     
     plan = []
     used_deliveries = set()  # Track deliveries already tested in any region
+    is_company = False
+    payment = None
 
     delivery = random.choice(third_party_deliveries)
     # Expect only one 3rd-party payment (банковская карта онлайн)
-    if len(third_party_payments) > 1:
-        print("Uh oh, more than 1 third-party payments, need to update test plan generation")
+    if len(third_party_payments) != 1:
+        print("✗ WARNING: unexpected number of third-party payments")
     else:
         # If only 1 3rd-party payment found (as expected), pair it with any 3rd-party delivery
+        # Credit card is compatible with any delivery
         region = random.choice(delivery.get('compatible_with', {}).get('region', []))
         plan.append({
             'region': region,
             'delivery': delivery,
-            'payment': third_party_payments[0]
+            'payment': third_party_payments[0],
+            'is_company': is_company
         })
         used_deliveries.add(delivery['en_name'])
     
@@ -1191,7 +1386,9 @@ def generate_test_plan(order):
         if delivery['en_name'] not in used_deliveries:
             compatible_payments = delivery.get('compatible_with', {}).get('payment', [])
             if compatible_payments:
-                payment_name = random.choice(compatible_payments) # Returns a string
+                payment_name = random.choice(compatible_payments) # Returns a string              
+                if payment_name == 'cashless payment (legal entities)':
+                    is_company = True 
                 # Find the full payment dictionary
                 payment = next(
                     p for p in order.payment_options 
@@ -1201,14 +1398,15 @@ def generate_test_plan(order):
                 plan.append({
                     'region': region,
                     'delivery': delivery,
-                    'payment': payment
+                    'payment': payment,
+                    'is_company': is_company
                 })
                 used_deliveries.add(delivery['en_name'])
             else:
                 print(f"✗ Warning: No compatible payments for {delivery['en_name']}")
     
     print(f'\nGenerated test plan with {len(plan)} combo(s)')
-    print('Tier 2: testing all 3rd-party delivery and payment option at least once')
+    print('Tier 2: testing every 3rd-party delivery and payment option at least once')
     print(f'{len(third_party_deliveries)} 3rd-party deliveries, {len(third_party_payments)} 3rd-party payments')
     return plan
 
@@ -1288,8 +1486,15 @@ def execute_single_order(order):
                             take_screenshot("basket_before_checkout")
                                 
                             if proceed_to_checkout():
-                                step_counter.print_step("Filling order form")                                
-                                fill_form_success = fill_order_form(user_email, test_phone, order)
+                                step_counter.print_step("Filling order form")
+                                # Order from a legal entity flow
+                                if order.is_company:
+                                    # Navigate to company order page
+                                    driver.get(website_main + "order/?person_type=COMPANY")
+                                    time.sleep(2)
+                                    fill_form_success = fill_order_form(user_email, test_phone, order)
+                                else:                          
+                                    fill_form_success = fill_order_form(user_email, test_phone, order)
                                 
                                 if fill_form_success:
                                     step_counter.print_step("Clicking delivery option")
@@ -1298,7 +1503,10 @@ def execute_single_order(order):
                                         order.summary['delivery_option'] = order.selected_delivery['local_name']
 
                                     step_counter.print_step("Clicking payment option")
-                                    payment_success = click_payment_option(order)
+                                    if order.is_company:
+                                        payment_success = click_payment_company(order)
+                                    else:
+                                        payment_success = click_payment_option(order)
                                     if payment_success:
                                         order.summary['payment_option'] = order.selected_payment['local_name']                                   
                                   
@@ -1350,7 +1558,7 @@ def execute_single_order(order):
         else:
             print("Order number: order wasn't placed")
         print(f"Chosen SKU: {order.sku['selected']}")
-        if order.summary['discount'] is None:
+        if order.summary['discount'] == 0:
             print(f"Item price: {order.summary['basket_price']} {order.currency}")
         else:
             print(f'Item: {order.summary['basket_price']}{order.currency} → discounted: {order.summary['basket_price_discounted']}{order.currency}')
@@ -1398,6 +1606,7 @@ def run_test_plan(order, emails, order_counter):
         order.selected_delivery = combo['delivery']
         order.selected_payment = combo['payment']
         order.sku['region'] = combo['region']
+        order.is_company = combo['is_company']
 
 
         print(f'COMBO {c}: {order.selected_delivery['local_name']} + {order.selected_payment['local_name']}')
