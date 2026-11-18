@@ -71,11 +71,11 @@ class ParentContext:
             'unavailable': []   # Track unavailable SKUs
         }
 
+        self.is_company = None
+
         self.selected_delivery = None 
 
         self.selected_payment = None
-
-        self.is_company = None
 
         # Results summary
         self.summary = {
@@ -118,6 +118,13 @@ class ParentContext:
     def get_available_payment_options(self):
         if not self.selected_delivery:
             return self.payment_options.copy()
+        elif self.is_company:
+            available = next((p for p in self.payment_options if p.get('is_company') is True), None)
+            """
+            available = [
+                p for p in self.payment_options
+                if p['is_company']
+        ]"""
         
         delivery = self.selected_delivery
         compatible = delivery.get('compatible_with', {})
@@ -280,13 +287,16 @@ class OrderContextRU(ParentContext):
                 'en_name': 'cash on delivery',
                 'opt_id': 'ID_PAY_SYSTEM_ID_5',
             },
-             {   'local_name': 'наложенный платеж',
+            {   'local_name': 'наложенный платеж',
                 'en_name': 'cash on delivery (ems)',
                 'opt_id': 'ID_PAY_SYSTEM_ID_9',
             },
+
             {   'local_name': 'безналичная оплата (оплата от организации)',
                 'en_name': 'cashless payment (legal entities)',
-                'opt_id': 'ID_PAY_SYSTEM_ID_3'
+                'opt_id': 'ID_PAY_SYSTEM_ID_3',
+                'is_default': True,
+                'is_company': True,
             }
         ]
 
@@ -371,7 +381,7 @@ def choose_address(order):
     'St. Petersburg': [
         '194017 СПб пр. Энгельса 66',
         '197101 СПб Большая Пушкарская 46 лит. А', # Google/Dadata zips don't match, used Dadata
-        '191180 СПб наб. Реки Фонтанки 92'
+        '191002 СПб наб. Реки Фонтанки 92'
     ],
     'regions': [
         '236004 Калининград, Аллея Смелых 25',
@@ -796,7 +806,6 @@ def click_payment_option(order):
         selected_name = selected['local_name']
         selected_id = selected['opt_id']
 
-        # Only interact if not default
         default = order.get_default_payment()
         default_name = default['local_name'] if default else None
         
@@ -849,36 +858,10 @@ def click_payment_option(order):
         print(f"✗ Error when clicking the payment option: {str(e)}")
         take_screenshot("payment_option_error")
         return False
-
-def click_payment_company(order):
-    try:
-        print("Only one payment option for legal entities...")
-        
-        selected = {   
-            'local_name': 'безналичная оплата (оплата от организации)',
-            'en_name': 'cashless payment (legal entities)',
-            'opt_id': 'ID_PAY_SYSTEM_ID_3'
-        }
-        
-        # Update order context
-        order.selected_payment = selected
-        selected_name = selected['local_name']
-        selected_id = selected['opt_id']
-
-        # Get default payment
-        default = order.get_default_payment()
-        default_name = default['local_name'] if default else None
-        
-        print(f"Using {selected_name} (virtual or default), no action needed")
-        return True, selected_name
-            
-    except Exception as e:
-        print(f"✗ Error in payment selection process: {str(e)}")
-        take_screenshot("payment_option_error")
-        return False, "Error"
-                                                                                                  
+                                                                                               
 def fill_order_form(user_email, test_phone, order):
     try:
+        print("Filling regular order form")
         ship_to = choose_address(order) #is a dictionary
         print(f"Chosen address: {ship_to}")
         
@@ -1051,10 +1034,13 @@ def fill_order_form(user_email, test_phone, order):
 
 def fill_company_order_form(user_email, test_phone, order):
     try:
-        ship_to = choose_address(order) #is a dictionary
-        print(f"Chosen address: {ship_to}")
+        print("Filling company order form")
         tin_num = choose_tin(order)
         print(f"Chosen TIN: {tin_num}")
+
+        # Address DOESN'T autopopulate in Selenium, need to copy and paste
+        ship_to = choose_address(order) #is a dictionary
+        print(f"Chosen address: {ship_to}")
 
         # Wait for the form to be present
         WebDriverWait(driver, 15).until(EC.presence_of_element_located(
@@ -1099,6 +1085,7 @@ def fill_company_order_form(user_email, test_phone, order):
             
         except Exception as e:
             print(f"✗ Error with phone field: {str(e)}")
+            traceback.print_exc()
             take_screenshot("phone_field_error")
             return False
         
@@ -1136,16 +1123,6 @@ def fill_company_order_form(user_email, test_phone, order):
             tin_input.send_keys(Keys.ENTER)
             time.sleep(1)
 
-            # Wait for TomSelect address field to have a value
-            # TomSelect stores the value differently — check the hidden select
-            try:
-                WebDriverWait(driver, 10).until(
-                    lambda d: d.find_element(By.ID, "bx-input-order-FULL_ADDRESS_SEARCH_SHIP").get_attribute("value") != ""
-                )
-                print("Address auto-filled")
-            except:
-                print("✗ Address may not have auto-filled")
-                # Fallback: type the address manually from the API response?
     
         except Exception as e:
             print(f"✗ Error with TIN field: {str(e)}")
@@ -1156,12 +1133,73 @@ def fill_company_order_form(user_email, test_phone, order):
         # Order comment (2 lines)
         try:
             comment_field = driver.find_element(By.ID, "bx-input-order-USER_DESCRIPTION")
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", comment_field)
             driver.execute_script('arguments[0].value = "Алена Авто Тест\\nЭтот заказ сделан моими усердными миньонами";', comment_field)
             print("Comment field filled")
         
         except Exception as e:
             print(f"✗ Error with comment field: {str(e)}")
             take_screenshot("comment_field_error")
+
+
+        # Check if address section exists at all
+        try:
+            # Scroll to the address section
+            address_input = wait.until(
+                                EC.presence_of_element_located((By.ID, "bx-input-order-FULL_ADDRESS_SEARCH_SHIP-ts-control"))
+                            )
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", address_input)
+            time.sleep(2)
+           
+            print(f"Address typed: {ship_to}")
+            print("Waiting for Dadata suggestions...")
+            time.sleep(2)
+            
+            # Get the expected zip code
+            expected_zip = ship_to[:6].strip()
+            print(f"Expected zip: '{expected_zip}'")
+            
+            # Wait for suggestions dropdown
+            suggestions = WebDriverWait(driver, 5).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ts-dropdown .option, .option[data-selectable]"))
+            )
+            
+            if not suggestions:
+                time.sleep(1)
+                suggestions = driver.find_elements(By.CSS_SELECTOR, ".ts-dropdown .option, .option[data-selectable]")
+            
+            print(f"Found {len(suggestions)} Dadata suggestions")
+            
+            # Find best match by zip code
+            chosen = None
+            for i, suggestion in enumerate(suggestions):
+                text = suggestion.text.strip()
+                print(f"  Option {i+1}: {text[:100]}")
+                
+                if expected_zip and text[:6] == expected_zip:
+                    chosen = suggestion
+                    print(f"  → Zip match!")
+                    break
+            
+            if not chosen and suggestions:
+                chosen = suggestions[0]
+                print(f"  → No zip match, using first option")
+            
+            if chosen:
+                chosen.click()
+                time.sleep(1)
+                print("Address selected")
+            else:
+                print("✗ No suggestions found")
+                take_screenshot("no_address_suggestions")
+                return False
+                
+        except Exception as e:
+            print(f"✗ Error with address field: {str(e)}")
+            traceback.print_exc()
+            take_screenshot("address_field_error")
+            return False
+                
      
         # Billing address is the same as shipping (default tick remains)
         print("Billing address remains same as shipping (default)")
@@ -1365,8 +1403,9 @@ def generate_test_plan(order):
     is_company = False
     payment = None
 
+    # First combine a random 3rd party delivery with 1 3rd party payment
+    # (Expect only 1 3rd party payment "card online", compatible with any delivery)
     delivery = random.choice(third_party_deliveries)
-    # Expect only one 3rd-party payment (банковская карта онлайн)
     if len(third_party_payments) != 1:
         print("✗ WARNING: unexpected number of third-party payments")
     else:
@@ -1377,33 +1416,42 @@ def generate_test_plan(order):
             'region': region,
             'delivery': delivery,
             'payment': third_party_payments[0],
+            # Always false, because the payment is "card online"
             'is_company': is_company
         })
         used_deliveries.add(delivery['en_name'])
     
-    # Pair remaining 3rd-party deliveries with any compatible payments
+    # Then pair remaining 3rd-party deliveries with any compatible payments
     for delivery in third_party_deliveries:
         if delivery['en_name'] not in used_deliveries:
-            compatible_payments = delivery.get('compatible_with', {}).get('payment', [])
-            if compatible_payments:
-                payment_name = random.choice(compatible_payments) # Returns a string              
-                if payment_name == 'cashless payment (legal entities)':
-                    is_company = True 
-                # Find the full payment dictionary
-                payment = next(
-                    p for p in order.payment_options 
-                    if p['en_name'] == payment_name
-                )
-                region = random.choice(delivery.get('compatible_with', {}).get('region', []))
-                plan.append({
-                    'region': region,
-                    'delivery': delivery,
-                    'payment': payment,
-                    'is_company': is_company
-                })
-                used_deliveries.add(delivery['en_name'])
+            # Decide if we're doing a company order
+            # Weighted random choice, picks the company roughly once in 5 times (returns a list so needs [0])
+            #is_company = random.choices([True, False], weights=[1, 5], k=1)[0]
+            is_company = True
+            if is_company:
+                order.is_company = is_company
+                payment = next((p for p in order.payment_options if p.get('is_company') is True), None)
             else:
-                print(f"✗ Warning: No compatible payments for {delivery['en_name']}")
+                compatible_payments = delivery.get('compatible_with', {}).get('payment', [])
+                if compatible_payments:
+                    payment_name = random.choice(compatible_payments) # Returns a string              
+                    # Find the full payment dictionary
+                    payment = next(
+                        p for p in order.payment_options 
+                        if p['en_name'] == payment_name
+                    )
+                else:
+                    print(f"✗ Warning: No compatible payments for {delivery['en_name']}")
+                    
+            region = random.choice(delivery.get('compatible_with', {}).get('region', []))
+            plan.append({
+                'region': region,
+                'delivery': delivery,
+                'payment': payment,
+                'is_company': is_company
+            })
+            used_deliveries.add(delivery['en_name'])
+            
     
     print(f'\nGenerated test plan with {len(plan)} combo(s)')
     print('Tier 2: testing every 3rd-party delivery and payment option at least once')
@@ -1492,7 +1540,7 @@ def execute_single_order(order):
                                     # Navigate to company order page
                                     driver.get(website_main + "order/?person_type=COMPANY")
                                     time.sleep(2)
-                                    fill_form_success = fill_order_form(user_email, test_phone, order)
+                                    fill_form_success = fill_company_order_form(user_email, test_phone, order)
                                 else:                          
                                     fill_form_success = fill_order_form(user_email, test_phone, order)
                                 
@@ -1503,10 +1551,7 @@ def execute_single_order(order):
                                         order.summary['delivery_option'] = order.selected_delivery['local_name']
 
                                     step_counter.print_step("Clicking payment option")
-                                    if order.is_company:
-                                        payment_success = click_payment_company(order)
-                                    else:
-                                        payment_success = click_payment_option(order)
+                                    payment_success = click_payment_option(order)
                                     if payment_success:
                                         order.summary['payment_option'] = order.selected_payment['local_name']                                   
                                   

@@ -179,8 +179,8 @@ class OrderContextIT(ParentContext):
         self.sku_lists = {
             'price_classes': {
                 0: [83836, 83820, 84547, 84545, 83089], # Under 70 EU
-        
-                1: [84558, 84638, 84087, 83842, 85574]  # 70+ EU
+                
+                1: [84558, 84638, 84654, 83842, 85312]  # 70+ EU
             }
         }
      

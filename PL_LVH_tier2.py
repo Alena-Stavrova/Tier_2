@@ -162,9 +162,9 @@ class OrderContextPL(ParentContext):
     
         self.sku_lists = {
             'price_classes': {
-                0: [72353, 69304, 79578, 70445, 84690], # Under 315 PLN (15 PLN fee)
-        
-                1: [79286, 69118, 78663, 72110, 84088]  # 315+ PLN
+                0: [72353, 69304, 79654, 70445, 84690], # Under 315 PLN (15 PLN fee)
+                
+                1: [72481, 69118, 78666, 72110, 84088]  # 315+ PLN
             }
         }
     
