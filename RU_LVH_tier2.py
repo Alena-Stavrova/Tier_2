@@ -67,6 +67,7 @@ class ParentContext:
         self.sku = {
             'selected': None,
             'price_class': None, # Just 1 price class here (price class 0)
+            # For Tier2 scripts region is set up in generate_test_plan()
             'region': None,
             'unavailable': []   # Track unavailable SKUs
         }
@@ -1038,15 +1039,18 @@ def fill_company_order_form(user_email, test_phone, order):
         tin_num = choose_tin(order)
         print(f"Chosen TIN: {tin_num}")
 
-        # Address DOESN'T autopopulate in Selenium, need to copy and paste
+        # If address doesn't auto-populate, will need to copy and paste
         ship_to = choose_address(order) #is a dictionary
         print(f"Chosen address: {ship_to}")
 
-        # Wait for the form to be present
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located(
+        # Wait for the form to be present (looks for the big container)
+        form_present = WebDriverWait(driver, 15).until(EC.presence_of_element_located(
             (By.ID, "bx-soa-order-form"))
         )
-        print("Form found, starting to fill fields...")
+        if form_present:
+            print("Form found, starting to fill fields...")
+        else:
+            print("✗ Can't find the order form")            
         
         # Contact information
         print("Filling contact information...")
@@ -1145,54 +1149,19 @@ def fill_company_order_form(user_email, test_phone, order):
         # Check if address section exists at all
         try:
             # Scroll to the address section
-            address_input = wait.until(
-                                EC.presence_of_element_located((By.ID, "bx-input-order-FULL_ADDRESS_SEARCH_SHIP-ts-control"))
-                            )
+            print("Checking the address field...")
+            # Wait for the address to be present
+            address_input = WebDriverWait(driver, 15).until(EC.presence_of_element_located(
+                        (By.ID, "bx-input-order-FULL_ADDRESS_SEARCH_SHIP"))
+                )
+            print("Address field found, checking if populated...")
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", address_input)
+            time.sleep(3)            
+
+            #if len(address_input.text) == 0:           
+            print("The address auto-populated")
             time.sleep(2)
-           
-            print(f"Address typed: {ship_to}")
-            print("Waiting for Dadata suggestions...")
-            time.sleep(2)
-            
-            # Get the expected zip code
-            expected_zip = ship_to[:6].strip()
-            print(f"Expected zip: '{expected_zip}'")
-            
-            # Wait for suggestions dropdown
-            suggestions = WebDriverWait(driver, 5).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ts-dropdown .option, .option[data-selectable]"))
-            )
-            
-            if not suggestions:
-                time.sleep(1)
-                suggestions = driver.find_elements(By.CSS_SELECTOR, ".ts-dropdown .option, .option[data-selectable]")
-            
-            print(f"Found {len(suggestions)} Dadata suggestions")
-            
-            # Find best match by zip code
-            chosen = None
-            for i, suggestion in enumerate(suggestions):
-                text = suggestion.text.strip()
-                print(f"  Option {i+1}: {text[:100]}")
-                
-                if expected_zip and text[:6] == expected_zip:
-                    chosen = suggestion
-                    print(f"  → Zip match!")
-                    break
-            
-            if not chosen and suggestions:
-                chosen = suggestions[0]
-                print(f"  → No zip match, using first option")
-            
-            if chosen:
-                chosen.click()
-                time.sleep(1)
-                print("Address selected")
-            else:
-                print("✗ No suggestions found")
-                take_screenshot("no_address_suggestions")
-                return False
+            # TODO add condition if address is not auto-populated
                 
         except Exception as e:
             print(f"✗ Error with address field: {str(e)}")
@@ -1409,8 +1378,8 @@ def generate_test_plan(order):
     if len(third_party_payments) != 1:
         print("✗ WARNING: unexpected number of third-party payments")
     else:
-        # If only 1 3rd-party payment found (as expected), pair it with any 3rd-party delivery
-        # Credit card is compatible with any delivery
+        # If only 1 3rd-party payment found (credit card, as expected), pair it with any 3rd-party delivery
+        # Credit card is compatible with any delivery so it'll work
         region = random.choice(delivery.get('compatible_with', {}).get('region', []))
         plan.append({
             'region': region,
@@ -1420,16 +1389,19 @@ def generate_test_plan(order):
             'is_company': is_company
         })
         used_deliveries.add(delivery['en_name'])
+   
     
     # Then pair remaining 3rd-party deliveries with any compatible payments
     for delivery in third_party_deliveries:
         if delivery['en_name'] not in used_deliveries:
             # Decide if we're doing a company order
             # Weighted random choice, picks the company roughly once in 5 times (returns a list so needs [0])
-            #is_company = random.choices([True, False], weights=[1, 5], k=1)[0]
-            is_company = True
+            is_company = random.choices([True, False], weights=[1, 5], k=1)[0]
+            #is_company = True
             if is_company:
-                order.is_company = is_company
+                # Update order context
+                order.is_company = True
+                # Complicated, but didn't want to hardcode like "payment_options[-1]"
                 payment = next((p for p in order.payment_options if p.get('is_company') is True), None)
             else:
                 compatible_payments = delivery.get('compatible_with', {}).get('payment', [])
